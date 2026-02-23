@@ -1,7 +1,7 @@
 import numpy as np
 
-# ‼️ Extracted strategy and filtering logic. 
-# ‼️ `calculate_pnl` and `calculate_performance_metrics` were completely deleted from this logic pipeline.
+
+
 def generate_base_trend(df):
     if df is None or df.empty:
         return df

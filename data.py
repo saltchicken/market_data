@@ -1,6 +1,6 @@
 from ib_insync import Stock, util
 
-# ‼️ Extracted data fetching logic to isolate IBKR API data requests.
+
 def build_end_date(target_date_str=None):
     if target_date_str is None:
         return '' 

@@ -1,6 +1,6 @@
 import numpy as np
 
-# ‼️ Extracted purely mathematical indicator calculations here.
+
 def add_atr_indicator(df, window):
     if df is None or df.empty:
         return df
