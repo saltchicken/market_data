@@ -1,16 +1,14 @@
 from ib_insync import *
 import pandas as pd
+import numpy as np
 
-def fetch_and_calculate_averages():
-    # Connect to a running instance of TWS or IB Gateway
+def connect_ibkr():
     ib = IB()
-    # Default port is 7497 for paper trading / 7496 for live
     ib.connect('127.0.0.1', 4002, clientId=1)
+    return ib
 
-    # Define the contract you want to trade/backtest
-    contract = Stock('SPY', 'SMART', 'USD')
-
-    # Fetch 1 year of daily historical data
+def fetch_historical_data(ib, symbol='SPY'):
+    contract = Stock(symbol, 'SMART', 'USD')
     bars = ib.reqHistoricalData(
         contract,
         endDateTime='',
@@ -20,24 +18,46 @@ def fetch_and_calculate_averages():
         useRTH=True,
         formatDate=1
     )
+    return util.df(bars)
 
-    # Convert the IBKR bars into a Pandas DataFrame for easier calculation
-    df = util.df(bars)
+def calculate_indicators(df):
+    if df is None or df.empty:
+        return df
+    
+    df['SMA_50'] = df['close'].rolling(window=50).mean()
+    df['EMA_20'] = df['close'].ewm(span=20, adjust=False).mean()
+    
+    return df
 
+def generate_signals(df):
+    if df is None or df.empty:
+        return df
+        
+    df['Trend'] = np.where(df['EMA_20'] > df['SMA_50'], 1, 0)
+    
+    # A diff of +1 means the trend went from 0 to 1 (Buy Signal).
+    # A diff of -1 means the trend went from 1 to 0 (Sell Signal).
+    df['Crossover_Signal'] = df['Trend'].diff()
+    
+    return df
+
+def main():
+    ib = connect_ibkr()
+    df = fetch_historical_data(ib)
+    
     if df is not None and not df.empty:
-        # ‼️ Calculate the 50-period Simple Moving Average (SMA) using a rolling window
-        df['SMA_50'] = df['close'].rolling(window=50).mean()
-
-        # ‼️ Calculate the 50-period Exponential Moving Average (EMA) using exponential weighting
-        df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
-
-        # Display the most recent 10 days to compare the lag and responsiveness
-        print(df[['date', 'close', 'SMA_50', 'EMA_50']].tail(10))
+        df = calculate_indicators(df)
+        df = generate_signals(df) 
+        
+        # Filter the DataFrame to display only the days where an actual crossover event fired
+        trade_events = df[df['Crossover_Signal'] != 0].dropna()
+        
+        print("Historical Crossover Events (1.0 = Buy, -1.0 = Sell):")
+        print(trade_events[['date', 'close', 'EMA_20', 'SMA_50', 'Crossover_Signal']].tail(10))
     else:
         print("No data returned.")
 
-    # Always disconnect when finished
     ib.disconnect()
 
 if __name__ == '__main__':
-    fetch_and_calculate_averages()
+    main()
