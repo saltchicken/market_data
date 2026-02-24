@@ -5,7 +5,7 @@ import logging
 from ib_insync import IB
 
 from config import StrategyConfig
-from utils import setup_logging
+from utils import setup_logging, create_error_handler
 from execution import ensure_connection, get_available_funds
 
 from account import verify_paper_account, verify_cash_account
@@ -19,6 +19,9 @@ def main():
     logging.info("Starting Paper Trading Bot...")
 
     ib = IB()
+
+    ib.errorEvent += create_error_handler("bad_symbols.txt")
+
     config = StrategyConfig()
 
     scan_state = {"date": None, "all_symbols": [], "remaining_symbols": []}

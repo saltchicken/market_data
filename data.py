@@ -1,6 +1,7 @@
 import pandas as pd
 import json
 import urllib.request
+import os
 from ib_insync import Stock, util
 
 
@@ -10,12 +11,27 @@ def format_symbols_for_ibkr(symbol_series):
     )
 
 
+def get_bad_symbols(filename="bad_symbols.txt"):
+    """
+    ‼️ NEW: Reads the dynamically generated list of invalid symbols from the file.
+    """
+    bad_symbols = {"AAS"}
+    if os.path.exists(filename):
+        with open(filename, "r") as f:
+            bad_symbols.update(f.read().splitlines())
+    return bad_symbols
+
+
 def get_sp500_symbols():
     print("Fetching latest S&P 500 symbols from Wikipedia...")
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
     tables = pd.read_html(url, storage_options={"User-Agent": "Mozilla/5.0"})
     df = tables[0]
-    symbols = format_symbols_for_ibkr(df["Symbol"]).tolist()
+
+    bad_symbols = get_bad_symbols()
+    filtered_symbols = df[~df["Symbol"].isin(bad_symbols)]["Symbol"]
+
+    symbols = format_symbols_for_ibkr(filtered_symbols).tolist()
     return symbols
 
 
@@ -34,30 +50,15 @@ def get_all_us_symbols():
         with urllib.request.urlopen(req) as response:
             raw_data = json.loads(response.read().decode())
 
-        valid_exchanges = {"Nasdaq", "NYSE", "NYSE AMEX", "CBOE", "BATS"}
-
-        invalid_keywords = ["FUND", "TRUST", "ACQUISITION", "SPAC", "ETF", "PORTFOLIO", 
-                            "WARRANT", "WARRANTS", "UNIT", "UNITS", "RIGHT", "RIGHTS", "PREFERRED"]
-
         symbols = []
+
+        bad_symbols = get_bad_symbols()
 
         # index 1 = Company Name, index 2 = Ticker, index 3 = Exchange
         for row in raw_data.get("data", []):
-            company_name = str(row[1]).upper()
             ticker = str(row[2])
-            exchange = str(row[3])
 
-            is_valid_equity = not any(kw in company_name for kw in invalid_keywords)
-            is_special_class = len(ticker) == 5 and ticker[-1] in ["W", "U", "R", "Q", "Z"]
-
-
-            if (
-                exchange in valid_exchanges
-                and is_valid_equity
-                and "-" not in ticker
-                and "." not in ticker
-                and not is_special_class
-            ):
+            if ticker not in bad_symbols:
                 symbols.append(ticker)
 
         # Remove any duplicates
