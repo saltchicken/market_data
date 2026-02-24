@@ -54,6 +54,7 @@ def apply_volume_filter(df):
     if "Volume_SMA" not in df.columns:
         return df
     mask_low_volume = df["volume"] <= df["Volume_SMA"]
+    mask_low_volume.iloc[-1] = False
     df.loc[mask_low_volume, "Trend"] = 0
     return df
 
