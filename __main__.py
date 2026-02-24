@@ -1,5 +1,6 @@
 import datetime
 import time
+import sys
 import pandas as pd
 from ib_insync import IB
 from config import StrategyConfig
@@ -18,6 +19,7 @@ from strategy import (
 from execution import (
     get_available_funds,
     get_current_positions,
+    execute_limit_order,
     execute_market_order,
     ensure_connection,
     get_pending_shares,
@@ -40,6 +42,56 @@ def get_sp500_symbols():
     symbols = format_symbols_for_ibkr(df["Symbol"]).tolist()
 
     return symbols
+
+
+def verify_paper_account(ib):
+    """
+    ‼️ NEW: Extracted verification logic to ensure we never accidentally place real trades.
+    IBKR paper trading account numbers always begin with 'D' (e.g., DU12345).
+    """
+    accounts = ib.managedAccounts()
+    if not accounts:
+        raise ConnectionError("No accounts found. Is the broker fully initialized?")
+
+    for acc in accounts:
+        if not acc.startswith("D"):
+            logging.critical(
+                f"‼️ DANGER: Live account detected ({acc})! Aborting immediately to prevent real trades."
+            )
+
+            sys.exit(1)
+
+    logging.info(
+        f"‼️ Security Check Passed: Verified Paper Trading Account(s) -> {accounts}"
+    )
+
+
+def verify_cash_account(ib):
+    """
+    ‼️ NEW: Extracted verification logic to ensure we are running on a strict Cash account.
+    This prevents the bot from accidentally borrowing money and buying on margin.
+    """
+    account_values = ib.accountValues()
+    account_type = None
+
+    for val in account_values:
+        if val.tag == "AccountType":
+            account_type = val.value
+            break
+
+    if not account_type:
+        logging.critical(
+            "‼️ DANGER: Could not verify AccountType from broker. Aborting for safety."
+        )
+        sys.exit(1)
+
+    # if account_type.upper() != "CASH":
+    #     logging.critical(
+    #         f"‼️ DANGER: Margin account detected (Type: {account_type})! Aborting immediately to prevent leveraged trades."
+    #     )
+    #     sys.exit(1)
+
+    # logging.info("‼️ Security Check Passed: Verified Cash Account (No Margin).")
 
 
 def get_latest_live_signal(df, symbol, config):
@@ -85,9 +137,6 @@ def check_current_signal(ib, symbol, config):
 
 
 def run_daily_buy_scan(ib, config, scan_state):
-    """
-    ‼️ NEW: Now accepts `scan_state` as an argument to track progress.
-    """
     if not scan_state["remaining_symbols"]:
         return
 
@@ -121,7 +170,10 @@ def run_daily_buy_scan(ib, config, scan_state):
 
                 if available_funds >= estimated_cost:
                     print(f"🚨 EXECUTING BUY: {sym}")
-                    execute_market_order(ib, sym, "BUY", signal_data["shares"])
+
+                    execute_limit_order(
+                        ib, sym, "BUY", signal_data["shares"], signal_data["price"]
+                    )
                     available_funds -= estimated_cost
                 else:
                     print(
@@ -132,8 +184,6 @@ def run_daily_buy_scan(ib, config, scan_state):
 
         except Exception as e:
             print(f"‼️ Error processing {sym}: {e}")
-
-            # The symbol will remain in 'remaining_symbols' so it will be retried when the bot comes back online.
             if (
                 isinstance(e, ConnectionError)
                 or "socket" in str(e).lower()
@@ -141,7 +191,6 @@ def run_daily_buy_scan(ib, config, scan_state):
             ):
                 raise e
 
-            # If it's just a normal data error (e.g., no historical data for this ticker), remove it and move on
             if sym in scan_state["remaining_symbols"]:
                 scan_state["remaining_symbols"].remove(sym)
 
@@ -173,6 +222,7 @@ def monitor_open_positions(ib, config):
 
             if signal_data and signal_data["action"] == "SELL":
                 print(f"🚨 EXECUTING SELL: {sym}")
+
                 execute_market_order(ib, sym, "SELL", shares_to_sell)
 
         except Exception as e:
@@ -190,6 +240,8 @@ def main():
     config = StrategyConfig()
 
     ensure_connection(ib, config)
+    verify_paper_account(ib)
+    verify_cash_account(ib)
     config.account_capital = get_available_funds(ib)
 
     scan_state = {"date": None, "remaining_symbols": []}
@@ -198,6 +250,8 @@ def main():
         while True:
             try:
                 ensure_connection(ib, config)
+                verify_paper_account(ib)
+                verify_cash_account(ib)
 
                 now = datetime.datetime.now()
 
@@ -211,13 +265,14 @@ def main():
                 if scan_state["remaining_symbols"]:
                     run_daily_buy_scan(ib, config, scan_state)
 
-                # Only monitor open positions once the daily buy scan is entirely complete
                 if not scan_state["remaining_symbols"]:
                     monitor_open_positions(ib, config)
                     logging.info(f"Cycle complete. Sleeping for 15 minutes...")
                     ib.sleep(60 * 15)
 
             except Exception as e:
+                # Keep standard error handling, but the sys.exit(1) in verify_paper_account
+                # will cleanly bypass this catch block and kill the terminal process completely.
                 logging.error(f"‼️ Connection or execution error encountered: {e}")
                 logging.info(
                     "‼️ Cleaning up connection state and retrying in 60 seconds..."

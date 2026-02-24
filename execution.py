@@ -1,4 +1,4 @@
-from ib_insync import MarketOrder, Stock
+from ib_insync import LimitOrder, MarketOrder, Stock
 from ib_insync import IB
 import logging
 
@@ -48,9 +48,29 @@ def get_current_positions(ib):
     return current_holdings
 
 
+def execute_limit_order(ib, symbol, action, quantity, price):
+    """Executes a live limit order."""
+
+    limit_price = round(float(price), 2)
+
+    print(
+        f"‼️ TRANSMITTING ORDER: {action} {quantity} shares of {symbol} at Limit ${limit_price}"
+    )
+    contract = Stock(symbol, "SMART", "USD")
+    ib.qualifyContracts(contract)
+    order = LimitOrder(action, quantity, limit_price)
+    trade = ib.placeOrder(contract, order)
+
+    trade.fillEvent += on_fill_event
+
+    return trade
+
+
 def execute_market_order(ib, symbol, action, quantity):
     """Executes a live market order."""
-    print(f"‼️ TRANSMITTING ORDER: {action} {quantity} shares of {symbol}")
+    print(
+        f"‼️ TRANSMITTING ORDER: {action} {quantity} shares of {symbol} at Market Price"
+    )
     contract = Stock(symbol, "SMART", "USD")
     ib.qualifyContracts(contract)
     order = MarketOrder(action, quantity)
