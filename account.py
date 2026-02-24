@@ -1,8 +1,6 @@
 import sys
 import logging
 
-# This ensures security and risk-management functions are modular and easy to find.
-
 
 def verify_paper_account(ib):
     """

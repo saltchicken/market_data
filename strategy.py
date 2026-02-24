@@ -2,8 +2,6 @@ import numpy as np
 from data import fetch_historical_data
 from indicators import calculate_indicators
 
-# since they inherently orchestrate the strategy pipeline.
-
 
 def get_latest_live_signal(df, symbol, config):
     if df is None or df.empty:

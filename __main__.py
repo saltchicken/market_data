@@ -30,24 +30,20 @@ def main():
     logging.info("Starting Paper Trading Bot...")
 
     if args.monitor_only:
-        logging.info("RUNNING IN MONITOR-ONLY MODE. Buy scanning is disabled.")
+        logging.info("‼️ RUNNING IN MONITOR-ONLY MODE. Buy scanning is disabled.")
 
     ib = IB()
     config = StrategyConfig()
 
-    # We now let the while loop handle the initial connection naturally.
-
-    scan_state = {"date": None, "remaining_symbols": []}
+    scan_state = {"date": None, "all_symbols": [], "remaining_symbols": []}
 
     try:
         while True:
             try:
-
                 ensure_connection(ib, config)
                 verify_paper_account(ib)
                 verify_cash_account(ib)
 
-                # scale up or down as your account balance changes throughout the day/week!
                 config.account_capital = get_available_funds(ib)
 
                 if not args.monitor_only:
@@ -59,21 +55,42 @@ def main():
                         )
                         scan_state["date"] = now.date()
 
-                        scan_state["remaining_symbols"] = get_sp500_symbols()
+                        scan_state["all_symbols"] = get_sp500_symbols()
+                        scan_state["remaining_symbols"] = list(
+                            scan_state["all_symbols"]
+                        )
 
-                    if scan_state["remaining_symbols"]:
-                        run_daily_buy_scan(ib, config, scan_state)
+                    # If the remaining queue empties out, instantly refill it from the cache!
+                    if (
+                        not scan_state["remaining_symbols"]
+                        and scan_state["all_symbols"]
+                    ):
+                        logging.info(
+                            "‼️ Scan complete! Restarting S&P 500 loop from the beginning..."
+                        )
+                        scan_state["remaining_symbols"] = list(
+                            scan_state["all_symbols"]
+                        )
 
-                if args.monitor_only or not scan_state["remaining_symbols"]:
-                    monitor_open_positions(ib, config)
+                # Priority 1 - ALWAYS monitor open positions first to ensure quick exits
+                monitor_open_positions(ib, config)
 
-                    logging.info(f"Cycle complete. Sleeping for 15 minutes...")
-                    ib.sleep(60 * 15)
+                # Priority 2 - Process a small chunk of new buy signals
+                if not args.monitor_only and scan_state["remaining_symbols"]:
+                    run_daily_buy_scan(ib, config, scan_state, chunk_size=5)
+
+                    # Small delay between chunks to let the IBKR data farm breathe
+                    ib.sleep(5)
+                else:
+
+                    # since the remaining_symbols list will instantly refill otherwise.
+                    logging.info("Monitor-only mode active. Sleeping 5 mins...")
+                    ib.sleep(60 * 5)
 
             except Exception as e:
-                logging.error(f"Connection or execution error encountered: {e}")
+                logging.error(f"‼️ Connection or execution error encountered: {e}")
                 logging.info(
-                    "Cleaning up connection state and retrying in 60 seconds..."
+                    "‼️ Cleaning up connection state and retrying in 60 seconds..."
                 )
 
                 if ib.isConnected():

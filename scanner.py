@@ -1,3 +1,5 @@
+# This keeps __main__.py free of granular loop implementations.
+
 from strategy import check_current_signal
 from execution import (
     get_available_funds,
@@ -8,21 +10,23 @@ from execution import (
 )
 
 
-def run_daily_buy_scan(ib, config, scan_state):
+def run_daily_buy_scan(ib, config, scan_state, chunk_size=5):
     if not scan_state["remaining_symbols"]:
         return
 
+    chunk = scan_state["remaining_symbols"][:chunk_size]
+    scan_state["remaining_symbols"] = scan_state["remaining_symbols"][chunk_size:]
+
     print(
-        f"\n--- RUNNING DAILY BUY SCAN ({len(scan_state['remaining_symbols'])} symbols remaining) ---"
+        f"\n--- SCANNING BUY CHUNK ({len(chunk)} symbols) | {len(scan_state['remaining_symbols'])} left today ---"
     )
 
     available_funds = get_available_funds(ib)
     current_positions = get_current_positions(ib)
     print(f"Available Funds: ${available_funds:.2f}")
 
-    for sym in list(scan_state["remaining_symbols"]):
+    for sym in chunk:
         if sym in current_positions:
-            scan_state["remaining_symbols"].remove(sym)
             continue
 
         pending_buys = get_pending_shares(ib, sym, "BUY")
@@ -30,7 +34,6 @@ def run_daily_buy_scan(ib, config, scan_state):
             print(
                 f"‼️ Skipping BUY for {sym}: {pending_buys} shares are already pending."
             )
-            scan_state["remaining_symbols"].remove(sym)
             continue
 
         try:
@@ -50,8 +53,6 @@ def run_daily_buy_scan(ib, config, scan_state):
                         f"⚠️ INSUFFICIENT FUNDS to buy {sym}. Cost: ${estimated_cost:.2f}, Available: ${available_funds:.2f}"
                     )
 
-            scan_state["remaining_symbols"].remove(sym)
-
         except Exception as e:
             print(f"‼️ Error processing {sym}: {e}")
             if (
@@ -59,10 +60,9 @@ def run_daily_buy_scan(ib, config, scan_state):
                 or "socket" in str(e).lower()
                 or "disconnect" in str(e).lower()
             ):
-                raise e
 
-            if sym in scan_state["remaining_symbols"]:
-                scan_state["remaining_symbols"].remove(sym)
+                scan_state["remaining_symbols"].insert(0, sym)
+                raise e
 
         ib.sleep(2)  # Prevent API pacing errors
 
