@@ -1,4 +1,6 @@
 import pandas as pd
+import json
+import urllib.request
 from ib_insync import Stock, util
 
 
@@ -15,6 +17,62 @@ def get_sp500_symbols():
     df = tables[0]
     symbols = format_symbols_for_ibkr(df["Symbol"]).tolist()
     return symbols
+
+
+def get_all_us_symbols():
+    """
+    Fetches all available US stock symbols using the official SEC API.
+    """
+    print("Fetching all US stock symbols from the SEC...")
+
+    url = "https://www.sec.gov/files/company_tickers_exchange.json"
+
+    headers = {"User-Agent": "PaperTradingBot john.eicher89@gmail.com"}
+    req = urllib.request.Request(url, headers=headers)
+
+    try:
+        with urllib.request.urlopen(req) as response:
+            raw_data = json.loads(response.read().decode())
+
+        valid_exchanges = {"Nasdaq", "NYSE", "NYSE AMEX", "CBOE", "BATS"}
+
+        invalid_keywords = ["FUND", "TRUST", "ACQUISITION", "SPAC", "ETF", "PORTFOLIO", 
+                            "WARRANT", "WARRANTS", "UNIT", "UNITS", "RIGHT", "RIGHTS", "PREFERRED"]
+
+        symbols = []
+
+        # index 1 = Company Name, index 2 = Ticker, index 3 = Exchange
+        for row in raw_data.get("data", []):
+            company_name = str(row[1]).upper()
+            ticker = str(row[2])
+            exchange = str(row[3])
+
+            is_valid_equity = not any(kw in company_name for kw in invalid_keywords)
+            is_special_class = len(ticker) == 5 and ticker[-1] in ["W", "U", "R", "Q", "Z"]
+
+
+            if (
+                exchange in valid_exchanges
+                and is_valid_equity
+                and "-" not in ticker
+                and "." not in ticker
+                and not is_special_class
+            ):
+                symbols.append(ticker)
+
+        # Remove any duplicates
+        unique_symbols = list(set(symbols))
+
+        major_etfs = ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "ARKK"]
+        unique_symbols.extend([etf for etf in major_etfs if etf not in unique_symbols])
+
+        unique_symbols.sort()
+
+        return format_symbols_for_ibkr(pd.Series(unique_symbols)).tolist()
+
+    except Exception as e:
+        print(f"Failed to fetch SEC symbols: {e}. Falling back to S&P 500.")
+        return get_sp500_symbols()
 
 
 def build_end_date(target_date_str=None):
