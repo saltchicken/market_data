@@ -8,22 +8,22 @@ def get_latest_live_signal(df, symbol, config):
         return None
 
     latest_data = df.iloc[-1]
-    signal = latest_data["Crossover_Signal"]
-    result_signal = None
+
+    signal = latest_data.get("Crossover_Signal", 0)
+
+    result_signal = {
+        "symbol": symbol,
+        "action": None,
+        "price": latest_data["close"],
+    }
 
     if signal == 1.0:
-        result_signal = {
-            "symbol": symbol,
-            "action": "BUY",
-            "price": latest_data["close"],
-            "shares": latest_data["Target_Shares"],
-        }
+        result_signal["action"] = "BUY"
+
+        result_signal["shares"] = latest_data["Target_Shares"]
     elif signal == -1.0:
-        result_signal = {
-            "symbol": symbol,
-            "action": "SELL",
-            "price": latest_data["close"],
-        }
+        result_signal["action"] = "SELL"
+
     return result_signal
 
 

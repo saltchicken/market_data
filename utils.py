@@ -22,6 +22,8 @@ def setup_logging(log_filename="trading_bot.log"):
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
 
-    logging.getLogger("ib_insync").setLevel(logging.INFO)
+    logging.getLogger("ib_insync").setLevel(
+        logging.WARNING
+    )  # Set logging to INFO if needed
 
     return logger

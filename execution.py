@@ -2,6 +2,8 @@ from ib_insync import LimitOrder, MarketOrder, Stock
 from ib_insync import IB
 import logging
 
+from account import verify_paper_account, verify_cash_account
+
 
 def on_fill_event(trade, fill):
     """
@@ -68,9 +70,7 @@ def execute_limit_order(ib, symbol, action, quantity, price):
 
 def execute_market_order(ib, symbol, action, quantity):
     """Executes a live market order."""
-    print(
-        f"‼️ TRANSMITTING ORDER: {action} {quantity} shares of {symbol} at Market Price"
-    )
+    print(f"TRANSMITTING ORDER: {action} {quantity} shares of {symbol} at Market Price")
     contract = Stock(symbol, "SMART", "USD")
     ib.qualifyContracts(contract)
     order = MarketOrder(action, quantity)
@@ -86,23 +86,25 @@ def ensure_connection(ib: IB, config):
     if ib.isConnected():
         return
 
-    logging.warning(
-        "‼️ Broker connection lost or not started. Attempting to connect..."
-    )
+    logging.warning("Broker connection lost or not started. Attempting to connect...")
 
     while not ib.isConnected():
         try:
             ib.connect(config.ib_host, config.ib_port, clientId=config.ib_client_id)
-            logging.info("‼️ Successfully connected to Interactive Brokers.")
+            logging.info("Successfully connected to Interactive Brokers.")
+
+            verify_paper_account(ib)
+            verify_cash_account(ib)
+
         except ConnectionRefusedError:
             logging.error(
-                "‼️ Connection refused. Is TWS or IB Gateway running? Retrying in 60 seconds..."
+                "Connection refused. Is TWS or IB Gateway running? Retrying in 60 seconds..."
             )
 
             ib.sleep(60)
         except Exception as e:
             logging.error(
-                f"‼️ Unexpected connection error: {e}. Retrying in 60 seconds..."
+                f"Unexpected connection error: {e}. Retrying in 60 seconds..."
             )
 
             ib.sleep(60)

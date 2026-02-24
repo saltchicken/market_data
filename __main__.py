@@ -41,8 +41,6 @@ def main():
         while True:
             try:
                 ensure_connection(ib, config)
-                verify_paper_account(ib)
-                verify_cash_account(ib)
 
                 config.account_capital = get_available_funds(ib)
 

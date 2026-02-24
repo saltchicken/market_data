@@ -31,13 +31,14 @@ def run_daily_buy_scan(ib, config, scan_state, chunk_size=5):
 
         pending_buys = get_pending_shares(ib, sym, "BUY")
         if pending_buys > 0:
-            print(
-                f"‼️ Skipping BUY for {sym}: {pending_buys} shares are already pending."
-            )
+            print(f"Skipping BUY for {sym}: {pending_buys} shares are already pending.")
             continue
 
         try:
             signal_data = check_current_signal(ib, sym, config)
+
+            if signal_data:
+                print(f"SCANNED: {sym} | Current Price: ${signal_data['price']:.2f}")
 
             if signal_data and signal_data["action"] == "BUY":
                 estimated_cost = signal_data["shares"] * signal_data["price"]
@@ -83,7 +84,7 @@ def monitor_open_positions(ib, config):
 
         if shares_to_sell <= 0:
             print(
-                f"‼️ Skipping SELL for {sym}: all {quantity} shares are already pending sale."
+                f"Skipping SELL for {sym}: all {quantity} shares are already pending sale."
             )
             continue
 
