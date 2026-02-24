@@ -1,7 +1,8 @@
 class StrategyConfig:
     def __init__(self):
         self.ib_host = "127.0.0.1"
-        self.ib_port = 4002  # Make sure this matches your Paper Trading port
+        self.ib_port = 7497  # Port for workstation Paper Trading
+        # self.ib_port = 4002  # Make sure this matches your Paper Trading port
         self.ib_client_id = 1
         # Account & Risk Settings
         self.account_capital = 100000

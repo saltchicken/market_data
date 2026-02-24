@@ -1,22 +1,23 @@
 import numpy as np
+import pandas as pd
+
+
+def _calculate_true_range(df):
+    high_low = df["high"] - df["low"]
+    high_close = (df["high"] - df["close"].shift(1)).abs()
+    low_close = (df["low"] - df["close"].shift(1)).abs()
+
+    # Vectorized max across the three columns
+    return pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
 
 
 def add_atr_indicator(df, window):
     if df is None or df.empty:
         return df
 
-    df["prev_close"] = df["close"].shift(1)
-    df["TR"] = df[["high", "low", "prev_close"]].apply(
-        lambda x: max(
-            x["high"] - x["low"],
-            abs(x["high"] - x["prev_close"]),
-            abs(x["low"] - x["prev_close"]),
-        ),
-        axis=1,
-    )
-
+    df["TR"] = _calculate_true_range(df)
     df["ATR"] = df["TR"].ewm(alpha=1 / window, adjust=False).mean()
-    df.drop(columns=["prev_close", "TR"], inplace=True)
+    df.drop(columns=["TR"], inplace=True)
     return df
 
 
@@ -31,15 +32,7 @@ def add_adx_indicator(df, window):
     if df is None or df.empty:
         return df
 
-    df["prev_close"] = df["close"].shift(1)
-    df["TR"] = df[["high", "low", "prev_close"]].apply(
-        lambda x: max(
-            x["high"] - x["low"],
-            abs(x["high"] - x["prev_close"]),
-            abs(x["low"] - x["prev_close"]),
-        ),
-        axis=1,
-    )
+    df["TR"] = _calculate_true_range(df)
 
     df["up_move"] = df["high"] - df["high"].shift(1)
     df["down_move"] = df["low"].shift(1) - df["low"]
@@ -60,7 +53,6 @@ def add_adx_indicator(df, window):
     df["ADX"] = df["DX"].ewm(alpha=1 / window, adjust=False).mean()
 
     cols_to_drop = [
-        "prev_close",
         "TR",
         "up_move",
         "down_move",
@@ -74,7 +66,6 @@ def add_adx_indicator(df, window):
         "DX",
     ]
     df.drop(columns=cols_to_drop, inplace=True)
-
     return df
 
 
