@@ -126,8 +126,8 @@ def main():
             try:
                 ensure_connection(ib, config)
 
-                # if not _wait_for_market_open(ib):
-                #     continue
+                if not _wait_for_market_open(ib):
+                    continue
 
                 if _is_approaching_close():
                     logging.info(
