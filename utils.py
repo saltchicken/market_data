@@ -67,13 +67,13 @@ def create_error_handler(bad_symbols_file="bad_symbols.txt"):
     """
 
     def on_error(reqId, errorCode, errorString, contract):
-        if errorCode == 200:
+        if errorCode in [200, 201]:
 
             symbol = _extract_symbol_from_error(contract, errorString)
 
             if symbol:
                 logging.error(
-                    f"‼️ Invalid security definition detected for {symbol}. "
+                    f"‼️ Trading permission denied or invalid security definition detected for {symbol}. "
                     f"Adding to {bad_symbols_file}"
                 )
                 _append_bad_symbol(symbol, bad_symbols_file)
