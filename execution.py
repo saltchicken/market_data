@@ -50,17 +50,33 @@ def get_current_positions(ib):
 
 def _create_qualified_contract(ib, symbol):
     """
-    ‼️ NEW: Extracted contract creation and qualification logic
-    to prevent duplication across different order types.
+    Contract creation and qualification logic to prevent duplication across different order types.
     """
     contract = Stock(symbol, "SMART", "USD")
     ib.qualifyContracts(contract)
     return contract
 
+def _format_limit_price(price):
+    """
+    Dynamic price formatting to correctly handle 
+    sub-penny stock tick sizes (4 decimal places) while keeping standard 
+    stocks at 2 decimal places.
+    """
+    raw_price = float(price)
+    
+    if raw_price < 1.0:
+        limit_price = round(raw_price, 4)
+    else:
+        limit_price = round(raw_price, 2)
+        
+    if limit_price <= 0.0:
+        raise ValueError(f"Limit price rounded to ${limit_price}. Cannot place a $0 limit order.")
+    return limit_price
+
 
 def _place_and_monitor_order(ib, contract, order):
     """
-    Extracted the actual trade placement and event binding
+    Trade placement and event binding
     so all orders consistently use the same tracking logic.
     """
     trade = ib.placeOrder(contract, order)
@@ -70,7 +86,7 @@ def _place_and_monitor_order(ib, contract, order):
 
 def execute_limit_order(ib, symbol, action, quantity, price):
     """Executes a live limit order."""
-    limit_price = round(float(price), 2)
+    limit_price = _format_limit_price(price)
     print(
         f"TRANSMITTING ORDER: {action} {quantity} shares of {symbol} at Limit ${limit_price}"
     )
