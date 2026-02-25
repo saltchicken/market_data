@@ -2,6 +2,17 @@ import sys
 import logging
 
 
+def _abort_security_check(message):
+    """
+    Extracted the critical failure state to ensure consistent
+    logging and exiting across all security checks.
+    """
+    logging.critical(
+        f"‼️ DANGER: {message} Aborting immediately to prevent real trades."
+    )
+    sys.exit(1)
+
+
 def verify_paper_account(ib):
     """
     IBKR paper trading account numbers always begin with 'D' (e.g., DU12345).
@@ -12,13 +23,11 @@ def verify_paper_account(ib):
 
     for acc in accounts:
         if not acc.startswith("D"):
-            logging.critical(
-                f"‼️ DANGER: Live account detected ({acc})! Aborting immediately to prevent real trades."
-            )
-            sys.exit(1)
+
+            _abort_security_check(f"Live account detected ({acc})!")
 
     logging.info(
-        f"‼️ Security Check Passed: Verified Paper Trading Account(s) -> {accounts}"
+        f"Security Check Passed: Verified Paper Trading Account(s) -> {accounts}"
     )
 
 
@@ -35,12 +44,9 @@ def verify_cash_account(ib):
             break
 
     if not account_type:
-        logging.critical(
-            "‼️ DANGER: Could not verify AccountType from broker. Aborting for safety."
-        )
-        sys.exit(1)
+
+        _abort_security_check("Could not verify AccountType from broker.")
 
     # Note: You previously commented this out, leaving it intact here.
     # if account_type.upper() != "CASH":
-    #     logging.critical(...)
-    #     sys.exit(1)
+    #     _abort_security_check(f"Account is not CASH (Found: {account_type}).")

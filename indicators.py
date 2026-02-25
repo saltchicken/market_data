@@ -7,8 +7,21 @@ def _calculate_true_range(df):
     high_close = (df["high"] - df["close"].shift(1)).abs()
     low_close = (df["low"] - df["close"].shift(1)).abs()
 
-    # Vectorized max across the three columns
     return pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+
+
+def _calculate_directional_movement(df):
+    """
+    Extracted the raw up/down movement logic for ADX to keep
+    the main indicator function clean.
+    """
+    up_move = df["high"] - df["high"].shift(1)
+    down_move = df["low"].shift(1) - df["low"]
+
+    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
+    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
+
+    return plus_dm, minus_dm
 
 
 def add_atr_indicator(df, window):
@@ -33,39 +46,22 @@ def add_adx_indicator(df, window):
         return df
 
     df["TR"] = _calculate_true_range(df)
-
-    df["up_move"] = df["high"] - df["high"].shift(1)
-    df["down_move"] = df["low"].shift(1) - df["low"]
-    df["+DM"] = np.where(
-        (df["up_move"] > df["down_move"]) & (df["up_move"] > 0), df["up_move"], 0
-    )
-    df["-DM"] = np.where(
-        (df["down_move"] > df["up_move"]) & (df["down_move"] > 0), df["down_move"], 0
-    )
+    plus_dm, minus_dm = _calculate_directional_movement(df)
 
     df["TR_smooth"] = df["TR"].ewm(alpha=1 / window, adjust=False).mean()
-    df["+DM_smooth"] = df["+DM"].ewm(alpha=1 / window, adjust=False).mean()
-    df["-DM_smooth"] = df["-DM"].ewm(alpha=1 / window, adjust=False).mean()
 
-    df["+DI"] = 100 * (df["+DM_smooth"] / df["TR_smooth"])
-    df["-DI"] = 100 * (df["-DM_smooth"] / df["TR_smooth"])
-    df["DX"] = 100 * (abs(df["+DI"] - df["-DI"]) / (df["+DI"] + df["-DI"]))
-    df["ADX"] = df["DX"].ewm(alpha=1 / window, adjust=False).mean()
+    # Wrap in pd.Series to use .ewm()
+    df["+DM_smooth"] = pd.Series(plus_dm).ewm(alpha=1 / window, adjust=False).mean()
+    df["-DM_smooth"] = pd.Series(minus_dm).ewm(alpha=1 / window, adjust=False).mean()
 
-    cols_to_drop = [
-        "TR",
-        "up_move",
-        "down_move",
-        "+DM",
-        "-DM",
-        "TR_smooth",
-        "+DM_smooth",
-        "-DM_smooth",
-        "+DI",
-        "-DI",
-        "DX",
-    ]
-    df.drop(columns=cols_to_drop, inplace=True)
+    plus_di = 100 * (df["+DM_smooth"] / df["TR_smooth"])
+    minus_di = 100 * (df["-DM_smooth"] / df["TR_smooth"])
+
+    dx = 100 * (abs(plus_di - minus_di) / (plus_di + minus_di))
+    df["ADX"] = dx.ewm(alpha=1 / window, adjust=False).mean()
+
+    # Clean up intermediate columns to avoid dataframe bloat
+    df.drop(columns=["TR", "TR_smooth", "+DM_smooth", "-DM_smooth"], inplace=True)
     return df
 
 

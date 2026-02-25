@@ -12,9 +12,6 @@ def format_symbols_for_ibkr(symbol_series):
 
 
 def get_bad_symbols(filename="bad_symbols.txt"):
-    """
-    ‼️ NEW: Reads the dynamically generated list of invalid symbols from the file.
-    """
     bad_symbols = {"AAS"}
     if os.path.exists(filename):
         with open(filename, "r") as f:
@@ -22,17 +19,26 @@ def get_bad_symbols(filename="bad_symbols.txt"):
     return bad_symbols
 
 
-def get_sp500_symbols():
-    print("Fetching latest S&P 500 symbols from Wikipedia...")
-    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-    tables = pd.read_html(url, storage_options={"User-Agent": "Mozilla/5.0"})
-    df = tables[0]
+def _fetch_sec_raw_data():
+    """
+    Isolates network I/O from data parsing.
+    """
+    url = "https://www.sec.gov/files/company_tickers_exchange.json"
+    headers = {"User-Agent": "PaperTradingBot john.eicher89@gmail.com"}
+    req = urllib.request.Request(url, headers=headers)
 
-    bad_symbols = get_bad_symbols()
-    filtered_symbols = df[~df["Symbol"].isin(bad_symbols)]["Symbol"]
+    with urllib.request.urlopen(req) as response:
+        return json.loads(response.read().decode())
 
-    symbols = format_symbols_for_ibkr(filtered_symbols).tolist()
-    return symbols
+
+def _append_major_etfs(symbols_list):
+    """
+    without cluttering the main parsing loop.
+    """
+    major_etfs = ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "ARKK"]
+    existing_set = set(symbols_list)
+    symbols_list.extend([etf for etf in major_etfs if etf not in existing_set])
+    return symbols_list
 
 
 def get_all_us_symbols():
@@ -41,32 +47,19 @@ def get_all_us_symbols():
     """
     print("Fetching all US stock symbols from the SEC...")
 
-    url = "https://www.sec.gov/files/company_tickers_exchange.json"
-
-    headers = {"User-Agent": "PaperTradingBot john.eicher89@gmail.com"}
-    req = urllib.request.Request(url, headers=headers)
-
     try:
-        with urllib.request.urlopen(req) as response:
-            raw_data = json.loads(response.read().decode())
-
-        symbols = []
-
+        raw_data = _fetch_sec_raw_data()
         bad_symbols = get_bad_symbols()
 
         # index 1 = Company Name, index 2 = Ticker, index 3 = Exchange
-        for row in raw_data.get("data", []):
-            ticker = str(row[2])
+        symbols = [
+            str(row[2])
+            for row in raw_data.get("data", [])
+            if str(row[2]) not in bad_symbols
+        ]
 
-            if ticker not in bad_symbols:
-                symbols.append(ticker)
-
-        # Remove any duplicates
         unique_symbols = list(set(symbols))
-
-        major_etfs = ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "ARKK"]
-        unique_symbols.extend([etf for etf in major_etfs if etf not in unique_symbols])
-
+        unique_symbols = _append_major_etfs(unique_symbols)
         unique_symbols.sort()
 
         return format_symbols_for_ibkr(pd.Series(unique_symbols)).tolist()
@@ -74,6 +67,25 @@ def get_all_us_symbols():
     except Exception as e:
         print(f"Failed to fetch SEC symbols: {e}. Falling back to S&P 500.")
         return get_sp500_symbols()
+
+
+def get_sp500_symbols():
+    print("Fetching latest S&P 500 symbols from Wikipedia...")
+    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+
+    # we need to ensure Wikipedia doesn't crash the script too.
+    try:
+        tables = pd.read_html(url, storage_options={"User-Agent": "Mozilla/5.0"})
+        df = tables[0]
+
+        bad_symbols = get_bad_symbols()
+        filtered_symbols = df[~df["Symbol"].isin(bad_symbols)]["Symbol"]
+
+        symbols = format_symbols_for_ibkr(filtered_symbols).tolist()
+        return symbols
+    except Exception as e:
+        print(f"‼️ Failed to fetch S&P 500 symbols from Wikipedia: {e}.")
+        return []
 
 
 def build_end_date(target_date_str=None):
