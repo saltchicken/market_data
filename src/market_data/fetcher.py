@@ -1,13 +1,10 @@
 import pandas as pd
-from polygon import RESTClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from .database import upload_to_postgres
 
 
-def get_entire_market_ohlcv(date, api_key):
+def get_entire_market_ohlcv(date, client):
     """Fetches daily OHLCV for the entire US stock market for a specific date."""
-    client = RESTClient(api_key)
-
     try:
         all_market_data = client.get_grouped_daily_aggs(date)
         if not all_market_data:
@@ -40,8 +37,9 @@ def get_entire_market_ohlcv(date, api_key):
         return None
 
 
-def fetch_and_upload(target_date, db_url, api_key):
-    entire_market_data = get_entire_market_ohlcv(target_date, api_key)
+def fetch_and_upload(target_date, engine, client):
+    entire_market_data = get_entire_market_ohlcv(target_date, client)
+    
     if entire_market_data is not None and not entire_market_data.empty:
         entire_market_data["market_date"] = pd.to_datetime(target_date).date()
 
@@ -55,7 +53,6 @@ def fetch_and_upload(target_date, db_url, api_key):
         # Ensure idempotency: Delete existing data for this date so re-runs don't fail
         # due to UniqueViolation constraints.
         try:
-            engine = create_engine(db_url)
             with engine.begin() as conn:
                 conn.execute(
                     text("DELETE FROM daily_market_data WHERE market_date = :dt"),
@@ -65,7 +62,7 @@ def fetch_and_upload(target_date, db_url, api_key):
             print(f"Warning: Could not clear existing data for {target_date}: {e}")
 
         upload_to_postgres(
-            df=entire_market_data, table_name="daily_market_data", db_url=db_url
+            df=entire_market_data, table_name="daily_market_data", engine=engine
         )
     else:
         print(f"No market data found for {target_date}.")

@@ -54,10 +54,9 @@ def copy_to_sql_with_progress(df, table_name, engine, chunksize=100000):
         raw_conn.close()
 
 
-def upload_to_postgres(df, table_name, db_url):
+def upload_to_postgres(df, table_name, engine):
     """Uploads a pandas DataFrame to a PostgreSQL database."""
     try:
-        engine = create_engine(db_url)
         copy_to_sql_with_progress(df, table_name, engine, chunksize=100000)
     except Exception as e:
         if "UniqueViolation" in str(e) or "duplicate key" in str(e):

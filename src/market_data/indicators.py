@@ -1,16 +1,14 @@
 import numpy as np
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from .database import copy_to_sql_with_progress
 
 
-def run_python_indicator_pipeline(db_url, target_date=None):
+def run_python_indicator_pipeline(engine, target_date=None):
     """
     Calculates ATR, SMAs, EMAs, Bollinger Bands, Keltner Channels, Gap %, RVOL, RSI, MACD, OBV, and ADX entirely in Pandas.
     If target_date is set, runs in Daily Mode. If None, runs in Bulk Reset Mode.
     """
-    engine = create_engine(db_url)
-
     if target_date:
         print(f"\n[INDICATORS] Calculating for {target_date} using Pandas...")
         # Daily Mode: Pull 400 days of history to give moving averages runway to calculate

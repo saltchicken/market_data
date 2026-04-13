@@ -1,9 +1,12 @@
 import os
 import sys
 import time
+import gc
 import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from polygon import RESTClient
+from sqlalchemy import create_engine
 
 from .database import init_database
 from .fetcher import fetch_and_upload
@@ -22,6 +25,10 @@ if __name__ == "__main__":
         print("Error: Missing env variables.")
         sys.exit(1)
 
+    # --- Initialize global connections ONCE ---
+    engine = create_engine(DB_URL)
+    client = RESTClient(API_KEY)
+
     if RESET_DATABASE:
         print("\n=== STARTING 2-YEAR DATABASE RESET ===")
         init_database(DB_URL)
@@ -34,12 +41,18 @@ if __name__ == "__main__":
         for date_obj in dates_to_fetch:
             target_date = date_obj.strftime("%Y-%m-%d")
             print(f"\n--- Processing Raw Data: {target_date} ---")
-            fetch_and_upload(target_date, DB_URL, API_KEY)
+            
+            # Pass the engine and client into the function
+            fetch_and_upload(target_date, engine, client)
+            
             print("Sleeping for 13 seconds to avoid rate limits...")
             time.sleep(13)
+            
+            # Force memory cleanup after each day to prevent RAM bloat
+            gc.collect()
 
         print("\n[PHASE 2] Bulk calculating all indicators...")
-        run_python_indicator_pipeline(DB_URL, target_date=None)
+        run_python_indicator_pipeline(engine, target_date=None)
 
         print("\n=== RESET COMPLETE ===")
 
@@ -47,7 +60,7 @@ if __name__ == "__main__":
         print("\n=== RECALCULATING ALL INDICATORS FROM EXISTING RAW DATA ===")
         # Because target_date is None, this will automatically truncate the
         # daily_indicators table before bulk-inserting the new calculations.
-        run_python_indicator_pipeline(DB_URL, target_date=None)
+        run_python_indicator_pipeline(engine, target_date=None)
         print("\n=== RECALCULATION COMPLETE ===")
 
     else:
@@ -55,5 +68,5 @@ if __name__ == "__main__":
         TARGET_DATE = datetime.today().strftime("%Y-%m-%d")
         print(f"\n=== RUNNING DAILY update FOR {TARGET_DATE} ===")
 
-        fetch_and_upload(TARGET_DATE, DB_URL, API_KEY)
-        run_python_indicator_pipeline(DB_URL, target_date=TARGET_DATE)
+        fetch_and_upload(TARGET_DATE, engine, client)
+        run_python_indicator_pipeline(engine, target_date=TARGET_DATE)
