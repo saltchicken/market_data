@@ -64,5 +64,7 @@ def fetch_and_upload(target_date, engine, client):
         upload_to_postgres(
             df=entire_market_data, table_name="daily_market_data", engine=engine
         )
+        return True
     else:
         print(f"No market data found for {target_date}.")
+        return False

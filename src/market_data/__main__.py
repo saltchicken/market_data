@@ -82,7 +82,12 @@ def main():
         TARGET_DATE = datetime.today().strftime("%Y-%m-%d")
         print(f"\n=== RUNNING DAILY UPDATE FOR {TARGET_DATE} ===")
 
-        fetch_and_upload(TARGET_DATE, engine, client)
+        data_fetched = fetch_and_upload(TARGET_DATE, engine, client)
+        
+        if not data_fetched:
+            print(f"Halting process: No market data was found for {TARGET_DATE}. Skipping indicator calculation.")
+            sys.exit(1)
+
         run_python_indicator_pipeline(engine, target_date=TARGET_DATE)
 
 
