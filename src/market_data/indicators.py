@@ -338,6 +338,9 @@ def run_python_indicator_pipeline(engine, target_date=None):
 
     # --- 6. DoD, WoW, and MoM Rate of Change Calculations ---
 
+    # Re-initialize the groupby object so it registers all columns added in Steps 1-5
+    grouped_ticker = df.groupby("ticker")
+
     # RVOL DoD Shift
     df["rvol_ema_5_dod_diff"] = (
         df["rvol_ema_5"] - grouped_ticker["rvol_ema_5"].shift(1)
@@ -356,6 +359,9 @@ def run_python_indicator_pipeline(engine, target_date=None):
     df["rsi_14_dod_diff"] = (df["rsi_14"] - grouped_ticker["rsi_14"].shift(1)).round(2)
 
     # --- NEW: Smoothed Velocity ---
+    # Re-initialize again to capture volume_dod_pct and rsi_14_dod_diff from above
+    grouped_ticker = df.groupby("ticker")
+
     df["volume_dod_sma_3"] = (
         grouped_ticker["volume_dod_pct"]
         .transform(lambda x: x.rolling(3, min_periods=1).mean())
@@ -427,7 +433,7 @@ def run_python_indicator_pipeline(engine, target_date=None):
     df["_idx"] = df.groupby("ticker").cumcount()
 
     windows = [3, 5, 10, 21]
-    metrics = ["close", "rsi_14", "obv", "macd_hist", "atr_14"]
+    metrics = ["close", "sma_50_dist_pct", "rsi_14", "atr_14_pct", "vol_5_21_dist_pct"]
 
     # Dictionary to collect new columns and prevent DataFrame fragmentation
     new_columns = {}
@@ -539,6 +545,14 @@ def run_python_indicator_pipeline(engine, target_date=None):
         "close_r2_10d",
         "close_slope_21d",
         "close_r2_21d",
+        "sma_50_dist_pct_slope_3d",
+        "sma_50_dist_pct_r2_3d",
+        "sma_50_dist_pct_slope_5d",
+        "sma_50_dist_pct_r2_5d",
+        "sma_50_dist_pct_slope_10d",
+        "sma_50_dist_pct_r2_10d",
+        "sma_50_dist_pct_slope_21d",
+        "sma_50_dist_pct_r2_21d",
         "rsi_14_slope_3d",
         "rsi_14_r2_3d",
         "rsi_14_slope_5d",
@@ -547,31 +561,23 @@ def run_python_indicator_pipeline(engine, target_date=None):
         "rsi_14_r2_10d",
         "rsi_14_slope_21d",
         "rsi_14_r2_21d",
-        # --- Trajectory Metrics (OBV, MACD, ATR) ---
-        "obv_slope_3d",
-        "obv_r2_3d",
-        "obv_slope_5d",
-        "obv_r2_5d",
-        "obv_slope_10d",
-        "obv_r2_10d",
-        "obv_slope_21d",
-        "obv_r2_21d",
-        "macd_hist_slope_3d",
-        "macd_hist_r2_3d",
-        "macd_hist_slope_5d",
-        "macd_hist_r2_5d",
-        "macd_hist_slope_10d",
-        "macd_hist_r2_10d",
-        "macd_hist_slope_21d",
-        "macd_hist_r2_21d",
-        "atr_14_slope_3d",
-        "atr_14_r2_3d",
-        "atr_14_slope_5d",
-        "atr_14_r2_5d",
-        "atr_14_slope_10d",
-        "atr_14_r2_10d",
-        "atr_14_slope_21d",
-        "atr_14_r2_21d",
+        # --- Trajectory Metrics (Normalized) ---
+        "atr_14_pct_slope_3d",
+        "atr_14_pct_r2_3d",
+        "atr_14_pct_slope_5d",
+        "atr_14_pct_r2_5d",
+        "atr_14_pct_slope_10d",
+        "atr_14_pct_r2_10d",
+        "atr_14_pct_slope_21d",
+        "atr_14_pct_r2_21d",
+        "vol_5_21_dist_pct_slope_3d",
+        "vol_5_21_dist_pct_r2_3d",
+        "vol_5_21_dist_pct_slope_5d",
+        "vol_5_21_dist_pct_r2_5d",
+        "vol_5_21_dist_pct_slope_10d",
+        "vol_5_21_dist_pct_r2_10d",
+        "vol_5_21_dist_pct_slope_21d",
+        "vol_5_21_dist_pct_r2_21d",
     ]
     final_df = df[cols_to_keep].copy()
 
