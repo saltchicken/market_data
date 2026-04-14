@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import gc
+import argparse
 import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -12,24 +13,37 @@ from .database import init_database
 from .fetcher import fetch_and_upload
 from .indicators import run_python_indicator_pipeline
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser(description="Market Data Fetcher and Indicator Calculator")
+    
+    # Create a mutually exclusive group so we can't accidentally reset AND recalc
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--reset", 
+        action="store_true", 
+        help="Wipe the database, re-download 2 years of data, and bulk calculate indicators."
+    )
+    group.add_argument(
+        "--recalc", 
+        action="store_true", 
+        help="Re-calculate all indicators from existing raw data without fetching new data."
+    )
+    
+    args = parser.parse_args()
+
     load_dotenv()
     API_KEY = os.getenv("POLYGON_API_KEY")
     DB_URL = os.getenv("DB_URL")
 
-    # --- Configuration ---
-    RESET_DATABASE = False  # True = Wipes everything, re-downloads 2 years of data
-    RECALCULATE_INDICATORS = False  # True = Re-runs the math on existing raw data
-
     if not API_KEY or not DB_URL:
-        print("Error: Missing env variables.")
+        print("Error: Missing env variables. Ensure POLYGON_API_KEY and DB_URL are set.")
         sys.exit(1)
 
     # --- Initialize global connections ONCE ---
     engine = create_engine(DB_URL)
     client = RESTClient(API_KEY)
 
-    if RESET_DATABASE:
+    if args.reset:
         print("\n=== STARTING 2-YEAR DATABASE RESET ===")
         init_database(DB_URL)
 
@@ -56,7 +70,7 @@ if __name__ == "__main__":
 
         print("\n=== RESET COMPLETE ===")
 
-    elif RECALCULATE_INDICATORS:
+    elif args.recalc:
         print("\n=== RECALCULATING ALL INDICATORS FROM EXISTING RAW DATA ===")
         # Because target_date is None, this will automatically truncate the
         # daily_indicators table before bulk-inserting the new calculations.
@@ -66,7 +80,11 @@ if __name__ == "__main__":
     else:
         # Standard Daily Run
         TARGET_DATE = datetime.today().strftime("%Y-%m-%d")
-        print(f"\n=== RUNNING DAILY update FOR {TARGET_DATE} ===")
+        print(f"\n=== RUNNING DAILY UPDATE FOR {TARGET_DATE} ===")
 
         fetch_and_upload(TARGET_DATE, engine, client)
         run_python_indicator_pipeline(engine, target_date=TARGET_DATE)
+
+
+if __name__ == "__main__":
+    main()
