@@ -34,16 +34,13 @@ WITH BaseMetrics AS (
     WHERE market_date = (SELECT MAX(market_date) FROM daily_indicators)
 )
 SELECT 
-    bm.ticker,
-    fd.name,
-    fd.sector,
-    fd.industry,
-    bm.market_date,
-    ROUND(CAST(bm.atr_14_pct AS NUMERIC), 2) AS atr_14_pct,
-    ROUND(CAST(bm.base_vol_score AS NUMERIC), 2) AS base_vol_score,
-    ROUND(CAST(bm.price_trend_r2 AS NUMERIC), 2) AS price_trend_r2,
-    ROUND(CAST(bm.vol_trend_r2 AS NUMERIC), 2) AS vol_trend_r2,
-    ROUND(CAST(bm.short_term_momentum AS NUMERIC), 2) AS rsi_slope_3d,
+    ticker,
+    market_date,
+    ROUND(CAST(atr_14_pct AS NUMERIC), 2) AS atr_14_pct,
+    ROUND(CAST(base_vol_score AS NUMERIC), 2) AS base_vol_score,
+    ROUND(CAST(price_trend_r2 AS NUMERIC), 2) AS price_trend_r2,
+    ROUND(CAST(vol_trend_r2 AS NUMERIC), 2) AS vol_trend_r2,
+    ROUND(CAST(short_term_momentum AS NUMERIC), 2) AS rsi_slope_3d,
     
     -- ==========================================
     -- THE ENHANCED DYNAMIC ATTENTION SCORE
@@ -54,19 +51,15 @@ SELECT
     -- 3. Volume Quality Boost: Up to 30% multiplier if short-term volume surges are trending cleanly.
     -- 4. Momentum Kick: A small flat bonus if RSI and Velocity are actively accelerating.
     ROUND(CAST(
-        (bm.base_vol_score 
-         * (1.0 + CASE WHEN bm.price_trend_slope > 0 THEN (bm.price_trend_r2 * 0.5) ELSE 0 END) 
-         * (1.0 + CASE WHEN bm.vol_dist_pct > 0 THEN (bm.vol_trend_r2 * 0.3) ELSE 0 END)) 
-         + GREATEST(0, bm.short_term_momentum * 0.1) 
-         + GREATEST(0, bm.rsi_velocity * 0.05)
+        (base_vol_score 
+         * (1.0 + CASE WHEN price_trend_slope > 0 THEN (price_trend_r2 * 0.5) ELSE 0 END) 
+         * (1.0 + CASE WHEN vol_dist_pct > 0 THEN (vol_trend_r2 * 0.3) ELSE 0 END)) 
+         + GREATEST(0, short_term_momentum * 0.1) 
+         + GREATEST(0, rsi_velocity * 0.05)
     AS NUMERIC), 2) AS enhanced_attention_score
 
-FROM BaseMetrics bm
-LEFT JOIN financedatabase fd 
-    ON bm.ticker = fd.ticker
-WHERE bm.base_vol_score > 1.2  -- Minimum threshold: We want stocks with at least 20% above-average baseline volume
-  AND fd.country = 'United States'
-  AND bm.atr_14_pct > 4.0      -- Minimum Volatility: We only care about stocks that actually move (4% is a healthy baseline)
-  -- AND fd.sector = 'Energy'  -- (Commented out so it scans the whole market instead of restricting to one sector)
+FROM BaseMetrics
+WHERE base_vol_score > 1.2  -- Minimum threshold: We want stocks with at least 20% above-average baseline volume
+  AND atr_14_pct > 4.0      -- Minimum Volatility: We only care about stocks that actually move (4% is a healthy baseline)
 ORDER BY enhanced_attention_score DESC
 LIMIT 50;
