@@ -34,6 +34,8 @@ CREATE TABLE daily_indicators (
     atr_5 DOUBLE PRECISION,
     atr_21 DOUBLE PRECISION,
     atr_5_21_dist_pct DOUBLE PRECISION,
+    sma_21 DOUBLE PRECISION,
+    sma_21_dist_pct DOUBLE PRECISION,
     sma_50 DOUBLE PRECISION,
     sma_50_dist_pct DOUBLE PRECISION,
     sma_200 DOUBLE PRECISION,

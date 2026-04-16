@@ -97,6 +97,17 @@ def run_python_indicator_pipeline(engine, target_date=None):
     ).round(2)
 
     # SMAs
+    df["sma_21"] = (
+        grouped_close.rolling(21, min_periods=21)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
+
+    df["sma_21_dist_pct"] = (
+        ((df["close"] - df["sma_21"]) / df["sma_21"].replace(0, float("nan"))) * 100
+    ).round(2)
+
     df["sma_50"] = (
         grouped_close.rolling(50, min_periods=50)
         .mean()
@@ -494,6 +505,8 @@ def run_python_indicator_pipeline(engine, target_date=None):
         "atr_5",
         "atr_21",
         "atr_5_21_dist_pct",
+        "sma_21",
+        "sma_21_dist_pct",
         "sma_50",
         "sma_50_dist_pct",
         "sma_200",
