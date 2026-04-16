@@ -2,6 +2,7 @@ WITH basemetrics AS (
   SELECT
     ticker,
     market_date,
+    close,
     -- The original Relative Volume inputs
     rvol_ema_5,
     rvol_sma_10,
@@ -26,6 +27,7 @@ WITH basemetrics AS (
 
     -- Momentum & Velocity
     COALESCE(vol_5_21_dist_pct, 0) AS vol_dist_pct,
+    COALESCE(rsi_14, 0) AS rsi_14,
     COALESCE(rsi_14_slope_3d, 0) AS short_term_momentum,
 
     -- Volatility
@@ -41,6 +43,7 @@ SELECT
   ROUND(CAST(base_vol_score AS NUMERIC), 2) AS base_vol_score,
   ROUND(CAST(price_trend_r2 AS NUMERIC), 2) AS price_trend_r2,
   ROUND(CAST(vol_trend_r2 AS NUMERIC), 2) AS vol_trend_r2,
+  ROUND(CAST(rsi_14 AS NUMERIC), 2) AS rsi_14,
   ROUND(CAST(short_term_momentum AS NUMERIC), 2) AS rsi_slope_3d,
 
   -- ==========================================
@@ -69,5 +72,6 @@ FROM basemetrics
 WHERE
   base_vol_score > 1.2  -- Minimum threshold: We want stocks with at least 20% above-average baseline volume
   AND atr_14_pct > 4.0      -- Minimum Volatility: We only care about stocks that actually move (4% is a healthy baseline)
+  AND close >= 5.0      -- Penny Stock Filter: Exclude anything trading under $5.00
 ORDER BY enhanced_attention_score DESC
 LIMIT 50;
