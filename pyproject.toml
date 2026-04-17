@@ -22,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 market_data = "market_data.__main__:main"
+market_query = "market_data.query_runner:main"
 
 [tool.setuptools.package-data]
 "market_data" = ["sql/*.sql"]
