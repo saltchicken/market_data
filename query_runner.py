@@ -8,6 +8,8 @@ from sqlalchemy import create_engine, text
 def main():
     parser = argparse.ArgumentParser(description="Run analytical SQL queries against the database.")
     parser.add_argument("sql_file", help="Path to the .sql file you want to run (e.g., sql/attention_score.sql)")
+    # Add a new optional argument for the ticker
+    parser.add_argument("--ticker", "-t", type=str, help="Specific ticker to filter by", default=None)
     args = parser.parse_args()
 
     # Ensure the file exists
@@ -32,8 +34,13 @@ def main():
     try:
         engine = create_engine(db_url)
         
-        # Use Pandas to execute the query and format the output
-        df = pd.read_sql(text(query), engine)
+        # Set up our query parameters
+        params = {}
+        if args.ticker:
+            params["ticker"] = args.ticker.upper()
+        
+        # Pass the params dictionary to pd.read_sql
+        df = pd.read_sql(text(query), engine, params=params)
         
         if df.empty:
             print("Query executed successfully but returned no results.")

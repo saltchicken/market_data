@@ -23,8 +23,6 @@ WITH basemetrics AS (
 
     -- Volume Trend Metrics (Replacing removed OBV fields)
     COALESCE(close_slope_10d, 0) AS price_trend_slope,
-    COALESCE(vol_5_21_dist_pct_r2_10d, 0) AS vol_trend_r2,
-
     -- Momentum & Velocity
     COALESCE(vol_5_21_dist_pct, 0) AS vol_dist_pct,
     COALESCE(rsi_14, 0) AS rsi_14,
@@ -42,18 +40,9 @@ SELECT
   ROUND(CAST(atr_14_pct AS NUMERIC), 2) AS atr_14_pct,
   ROUND(CAST(base_vol_score AS NUMERIC), 2) AS base_vol_score,
   ROUND(CAST(price_trend_r2 AS NUMERIC), 2) AS price_trend_r2,
-  ROUND(CAST(vol_trend_r2 AS NUMERIC), 2) AS vol_trend_r2,
   ROUND(CAST(rsi_14 AS NUMERIC), 2) AS rsi_14,
   ROUND(CAST(short_term_momentum AS NUMERIC), 2) AS rsi_slope_3d,
 
-  -- ==========================================
-  -- THE ENHANCED DYNAMIC ATTENTION SCORE
-  -- ==========================================
-  -- 1. Base Score: Start with the weighted Relative Volume.
-  -- 2. Price Quality Boost: Up to 50% multiplier IF the price is moving in a clean UPWARD trend 
-  --    (We check slope > 0 so we don't accidentally reward a perfect downtrend).
-  -- 3. Volume Quality Boost: Up to 30% multiplier if short-term volume surges are trending cleanly.
-  -- 4. Momentum Kick: A small flat bonus if RSI and Velocity are actively accelerating.
   ROUND(CAST(
     (
       base_vol_score
@@ -61,7 +50,6 @@ SELECT
         1.0
         + CASE WHEN price_trend_slope > 0 THEN (price_trend_r2 * 0.5) ELSE 0 END
       )
-      * (1.0 + CASE WHEN vol_dist_pct > 0 THEN (vol_trend_r2 * 0.3) ELSE 0 END)
     )
     + GREATEST(0, short_term_momentum * 0.1)
     + GREATEST(0, rsi_velocity * 0.05)
@@ -75,3 +63,13 @@ WHERE
   AND close >= 5.0      -- Penny Stock Filter: Exclude anything trading under $5.00
 ORDER BY enhanced_attention_score DESC
 LIMIT 50;
+
+
+
+
+
+
+
+
+
+
