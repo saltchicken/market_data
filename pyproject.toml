@@ -20,5 +20,8 @@ dependencies = [
     "tqdm",
 ]
 
+[project.scripts]
+market_data = "market_data.__main__:main"
+
 [tool.setuptools.package-data]
 "market_data" = ["sql/*.sql"]
