@@ -123,24 +123,6 @@ CREATE TABLE daily_indicators (
     sma_50_dist_pct_r2_10d DOUBLE PRECISION,
     sma_50_dist_pct_slope_21d DOUBLE PRECISION,
     sma_50_dist_pct_r2_21d DOUBLE PRECISION,
-    
-    atr_14_pct_slope_3d DOUBLE PRECISION,
-    atr_14_pct_r2_3d DOUBLE PRECISION,
-    atr_14_pct_slope_5d DOUBLE PRECISION,
-    atr_14_pct_r2_5d DOUBLE PRECISION,
-    atr_14_pct_slope_10d DOUBLE PRECISION,
-    atr_14_pct_r2_10d DOUBLE PRECISION,
-    atr_14_pct_slope_21d DOUBLE PRECISION,
-    atr_14_pct_r2_21d DOUBLE PRECISION,
-    
-    vol_5_21_dist_pct_slope_3d DOUBLE PRECISION,
-    vol_5_21_dist_pct_r2_3d DOUBLE PRECISION,
-    vol_5_21_dist_pct_slope_5d DOUBLE PRECISION,
-    vol_5_21_dist_pct_r2_5d DOUBLE PRECISION,
-    vol_5_21_dist_pct_slope_10d DOUBLE PRECISION,
-    vol_5_21_dist_pct_r2_10d DOUBLE PRECISION,
-    vol_5_21_dist_pct_slope_21d DOUBLE PRECISION,
-    vol_5_21_dist_pct_r2_21d DOUBLE PRECISION,
 
     CONSTRAINT pk_ticker_indicator_date PRIMARY KEY (ticker, market_date)
 );

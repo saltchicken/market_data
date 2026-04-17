@@ -444,7 +444,7 @@ def run_python_indicator_pipeline(engine, target_date=None):
     df["_idx"] = df.groupby("ticker").cumcount()
 
     windows = [3, 5, 10, 21]
-    metrics = ["close", "sma_50_dist_pct", "rsi_14", "atr_14_pct", "vol_5_21_dist_pct"]
+    metrics = ["close", "sma_50_dist_pct", "rsi_14"]
 
     # Dictionary to collect new columns and prevent DataFrame fragmentation
     new_columns = {}
@@ -574,23 +574,6 @@ def run_python_indicator_pipeline(engine, target_date=None):
         "rsi_14_r2_10d",
         "rsi_14_slope_21d",
         "rsi_14_r2_21d",
-        # --- Trajectory Metrics (Normalized) ---
-        "atr_14_pct_slope_3d",
-        "atr_14_pct_r2_3d",
-        "atr_14_pct_slope_5d",
-        "atr_14_pct_r2_5d",
-        "atr_14_pct_slope_10d",
-        "atr_14_pct_r2_10d",
-        "atr_14_pct_slope_21d",
-        "atr_14_pct_r2_21d",
-        "vol_5_21_dist_pct_slope_3d",
-        "vol_5_21_dist_pct_r2_3d",
-        "vol_5_21_dist_pct_slope_5d",
-        "vol_5_21_dist_pct_r2_5d",
-        "vol_5_21_dist_pct_slope_10d",
-        "vol_5_21_dist_pct_r2_10d",
-        "vol_5_21_dist_pct_slope_21d",
-        "vol_5_21_dist_pct_r2_21d",
     ]
     final_df = df[cols_to_keep].copy()
 
