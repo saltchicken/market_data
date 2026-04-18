@@ -43,31 +43,6 @@ def main():
     engine = create_engine(DB_URL)
     client = RESTClient(API_KEY)
 
-    # --- Fetch Valid Tickers ONCE before any data pulling loops ---
-    valid_tickers = None
-    if not args.recalc:
-        print("\nFetching valid Common Stock (CS) tickers from Polygon (Throttled for API limits)...")
-        valid_tickers = set()
-        try:
-            # We explicitly ask for 1000 per page to minimize API calls.
-            ticker_iterator = client.list_tickers(market='stocks', type='CS', active=True, limit=1000)
-            
-            for i, t in enumerate(ticker_iterator):
-                if t.ticker:
-                    valid_tickers.add(t.ticker)
-                
-                # Sleep a tiny bit per ticker. At 1000 tickers per page, 
-                # a 0.015s sleep guarantees ~15 seconds between API pagination calls.
-                time.sleep(0.015) 
-                
-                if i > 0 and i % 1000 == 0:
-                    print(f"  ... fetched {len(valid_tickers)} tickers so far")
-
-            print(f"Found {len(valid_tickers)} active common stock tickers.")
-        except Exception as e:
-            print(f"Error fetching valid tickers list: {e}")
-            sys.exit(1)
-
     if args.reset:
         print("\n=== STARTING 2-YEAR DATABASE RESET ===")
         init_database(DB_URL)
@@ -81,8 +56,8 @@ def main():
             target_date = date_obj.strftime("%Y-%m-%d")
             print(f"\n--- Processing Raw Data: {target_date} ---")
             
-            # Pass the engine, client, and valid_tickers into the function
-            fetch_and_upload(target_date, engine, client, valid_tickers)
+            # Pass the engine and client into the function
+            fetch_and_upload(target_date, engine, client)
             
             print("Sleeping for 13 seconds to avoid rate limits...")
             time.sleep(13)
@@ -107,7 +82,7 @@ def main():
         TARGET_DATE = datetime.today().strftime("%Y-%m-%d")
         print(f"\n=== RUNNING DAILY UPDATE FOR {TARGET_DATE} ===")
 
-        data_fetched = fetch_and_upload(TARGET_DATE, engine, client, valid_tickers)
+        data_fetched = fetch_and_upload(TARGET_DATE, engine, client)
         
         if not data_fetched:
             print(f"Halting process: No market data was found for {TARGET_DATE}. Skipping indicator calculation.")
