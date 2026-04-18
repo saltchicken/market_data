@@ -13,22 +13,25 @@ from .database import init_database
 from .fetcher import fetch_and_upload
 from .indicators import run_python_indicator_pipeline
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Market Data Fetcher and Indicator Calculator")
-    
+    parser = argparse.ArgumentParser(
+        description="Market Data Fetcher and Indicator Calculator"
+    )
+
     # Create a mutually exclusive group so we can't accidentally reset AND recalc
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
-        "--reset", 
-        action="store_true", 
-        help="Wipe the database, re-download 2 years of data, and bulk calculate indicators."
+        "--reset",
+        action="store_true",
+        help="Wipe the database, re-download 2 years of data, and bulk calculate indicators.",
     )
     group.add_argument(
-        "--recalc", 
-        action="store_true", 
-        help="Re-calculate all indicators from existing raw data without fetching new data."
+        "--recalc",
+        action="store_true",
+        help="Re-calculate all indicators from existing raw data without fetching new data.",
     )
-    
+
     args = parser.parse_args()
 
     load_dotenv()
@@ -36,7 +39,9 @@ def main():
     DB_URL = os.getenv("DB_URL")
 
     if not API_KEY or not DB_URL:
-        print("Error: Missing env variables. Ensure POLYGON_API_KEY and DB_URL are set.")
+        print(
+            "Error: Missing env variables. Ensure POLYGON_API_KEY and DB_URL are set."
+        )
         sys.exit(1)
 
     # --- Initialize global connections ONCE ---
@@ -55,13 +60,13 @@ def main():
         for date_obj in dates_to_fetch:
             target_date = date_obj.strftime("%Y-%m-%d")
             print(f"\n--- Processing Raw Data: {target_date} ---")
-            
+
             # Pass the engine and client into the function
             fetch_and_upload(target_date, engine, client)
-            
+
             print("Sleeping for 13 seconds to avoid rate limits...")
             time.sleep(13)
-            
+
             # Force memory cleanup after each day to prevent RAM bloat
             gc.collect()
 
@@ -83,9 +88,11 @@ def main():
         print(f"\n=== RUNNING DAILY UPDATE FOR {TARGET_DATE} ===")
 
         data_fetched = fetch_and_upload(TARGET_DATE, engine, client)
-        
+
         if not data_fetched:
-            print(f"Halting process: No market data was found for {TARGET_DATE}. Skipping indicator calculation.")
+            print(
+                f"Halting process: No market data was found for {TARGET_DATE}. Skipping indicator calculation."
+            )
             sys.exit(1)
 
         run_python_indicator_pipeline(engine, target_date=TARGET_DATE)

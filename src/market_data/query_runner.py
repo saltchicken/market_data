@@ -5,11 +5,19 @@ import pandas as pd
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Run analytical SQL queries against the database.")
-    parser.add_argument("sql_file", help="Path to the .sql file you want to run (e.g., sql/attention_score.sql)")
+    parser = argparse.ArgumentParser(
+        description="Run analytical SQL queries against the database."
+    )
+    parser.add_argument(
+        "sql_file",
+        help="Path to the .sql file you want to run (e.g., sql/attention_score.sql)",
+    )
     # Add a new optional argument for the ticker
-    parser.add_argument("--ticker", "-t", type=str, help="Specific ticker to filter by", default=None)
+    parser.add_argument(
+        "--ticker", "-t", type=str, help="Specific ticker to filter by", default=None
+    )
     args = parser.parse_args()
 
     # Ensure the file exists
@@ -26,33 +34,34 @@ def main():
         sys.exit(1)
 
     # Read the SQL query from the file
-    with open(args.sql_file, 'r') as file:
+    with open(args.sql_file, "r") as file:
         query = file.read()
 
     # Connect to the database and run the query
     print(f"Executing query from {args.sql_file}...\n")
     try:
         engine = create_engine(db_url)
-        
+
         # Set up our query parameters
         params = {}
         if args.ticker:
             params["ticker"] = args.ticker.upper()
-        
+
         # Pass the params dictionary to pd.read_sql
         df = pd.read_sql(text(query), engine, params=params)
-        
+
         if df.empty:
             print("Query executed successfully but returned no results.")
         else:
             # Print all rows and columns nicely formatted in the terminal
-            pd.set_option('display.max_rows', None)
-            pd.set_option('display.max_columns', None)
-            pd.set_option('display.width', 1000)
+            pd.set_option("display.max_rows", None)
+            pd.set_option("display.max_columns", None)
+            pd.set_option("display.width", 1000)
             print(df)
-            
+
     except Exception as e:
         print(f"An error occurred while running the query:\n{e}")
+
 
 if __name__ == "__main__":
     main()

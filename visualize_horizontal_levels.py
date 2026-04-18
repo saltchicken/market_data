@@ -8,13 +8,30 @@ from sqlalchemy import create_engine, text
 try:
     import plotly.graph_objects as go
 except ImportError:
-    print("Plotly is required for visualization. Please install it using: pip install plotly")
+    print(
+        "Plotly is required for visualization. Please install it using: pip install plotly"
+    )
     sys.exit(1)
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Visualize Support & Resistance Levels on a Candlestick Chart.")
-    parser.add_argument("--ticker", "-t", type=str, required=True, help="Specific ticker to visualize (e.g., AAPL)")
-    parser.add_argument("--sql_file", "-s", type=str, default="sql/horizontal_levels.sql", help="Path to the horizontal levels SQL file")
+    parser = argparse.ArgumentParser(
+        description="Visualize Support & Resistance Levels on a Candlestick Chart."
+    )
+    parser.add_argument(
+        "--ticker",
+        "-t",
+        type=str,
+        required=True,
+        help="Specific ticker to visualize (e.g., AAPL)",
+    )
+    parser.add_argument(
+        "--sql_file",
+        "-s",
+        type=str,
+        default="sql/horizontal_levels.sql",
+        help="Path to the horizontal levels SQL file",
+    )
     args = parser.parse_args()
 
     ticker = args.ticker.upper()
@@ -46,7 +63,7 @@ def main():
           )
         ORDER BY market_date ASC
     """)
-    
+
     try:
         ohlc_df = pd.read_sql(ohlc_query, engine, params={"ticker": ticker})
         if ohlc_df.empty:
@@ -58,7 +75,7 @@ def main():
 
     # 2. Fetch the Support / Resistance levels using the provided SQL file
     print(f"Executing {sql_file} to find horizontal levels...")
-    with open(sql_file, 'r') as file:
+    with open(sql_file, "r") as file:
         query_text = file.read()
 
     try:
@@ -70,37 +87,41 @@ def main():
     print(f"Found {len(levels_df)} horizontal levels. Generating chart...\n")
 
     # 3. Build the Plotly Candlestick Chart
-    fig = go.Figure(data=[go.Candlestick(
-        x=ohlc_df['market_date'],
-        open=ohlc_df['open'],
-        high=ohlc_df['high'],
-        low=ohlc_df['low'],
-        close=ohlc_df['close'],
-        name="Price Action"
-    )])
+    fig = go.Figure(
+        data=[
+            go.Candlestick(
+                x=ohlc_df["market_date"],
+                open=ohlc_df["open"],
+                high=ohlc_df["high"],
+                low=ohlc_df["low"],
+                close=ohlc_df["close"],
+                name="Price Action",
+            )
+        ]
+    )
 
     # 4. Overlay the Support and Resistance levels as line segments
     # We draw them starting from the date they were formed (swing high/low) to the latest date
-    latest_date = ohlc_df['market_date'].max()
+    latest_date = ohlc_df["market_date"].max()
 
     for _, row in levels_df.iterrows():
-        is_resistance = row['level_type'] == 'Resistance'
+        is_resistance = row["level_type"] == "Resistance"
         line_color = "rgba(255, 0, 0, 0.7)" if is_resistance else "rgba(0, 255, 0, 0.7)"
-        
+
         # Add a line shape starting exactly on the market_date of the peak/trough
         fig.add_shape(
             type="line",
-            x0=row['market_date'], 
-            y0=row['price_level'],
-            x1=latest_date, 
-            y1=row['price_level'],
+            x0=row["market_date"],
+            y0=row["price_level"],
+            x1=latest_date,
+            y1=row["price_level"],
             line=dict(color=line_color, width=2, dash="dash"),
         )
-        
+
         # Add an annotation label at the beginning of the line
         fig.add_annotation(
-            x=row['market_date'],
-            y=row['price_level'],
+            x=row["market_date"],
+            y=row["price_level"],
             text=f"{row['level_type']} (${row['price_level']})",
             showarrow=True,
             arrowhead=2,
@@ -108,8 +129,10 @@ def main():
             arrowwidth=2,
             arrowcolor=line_color,
             ax=0,
-            ay=-20 if is_resistance else 20, # Text above for Resistance, below for Support
-            font=dict(color=line_color, size=11)
+            ay=(
+                -20 if is_resistance else 20
+            ),  # Text above for Resistance, below for Support
+            font=dict(color=line_color, size=11),
         )
 
     # Clean up the chart layout for a better financial look
@@ -118,12 +141,13 @@ def main():
         yaxis_title="Price ($)",
         xaxis_title="Date",
         xaxis_rangeslider_visible=False,
-        template="plotly_dark", # Looks great for financial charts
-        margin=dict(l=50, r=50, t=50, b=50)
+        template="plotly_dark",  # Looks great for financial charts
+        margin=dict(l=50, r=50, t=50, b=50),
     )
 
     # 5. Open the interactive HTML graph in the browser
     fig.show()
+
 
 if __name__ == "__main__":
     main()
