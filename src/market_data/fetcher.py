@@ -6,28 +6,33 @@ from .database import upload_to_postgres
 _VALID_TICKERS_CACHE = None
 
 def _get_valid_tickers(client):
-    """Fetches and caches the list of valid Common Stock tickers to avoid rate limits on repeated calls."""
+    """Fetches and caches the list of valid Common Stock and ADR tickers to avoid rate limits on repeated calls."""
     global _VALID_TICKERS_CACHE
     if _VALID_TICKERS_CACHE is not None:
         return _VALID_TICKERS_CACHE
 
-    print("\nFetching valid Common Stock (CS) tickers from Polygon (Throttled for API limits)...")
+    print("\nFetching valid Common Stock (CS) and ADR (ADRC) tickers from Polygon (Throttled for API limits)...")
     _VALID_TICKERS_CACHE = set()
+    
+    ticker_types = ['CS', 'ADRC']
+    
     try:
-        # We explicitly ask for 1000 per page to minimize API calls.
-        ticker_iterator = client.list_tickers(market='stocks', type='CS', active=True, limit=1000)
-        
-        for i, t in enumerate(ticker_iterator):
-            if getattr(t, "ticker", None):
-                _VALID_TICKERS_CACHE.add(t.ticker)
+        for t_type in ticker_types:
+            print(f"  -> Fetching type: {t_type}")
+            # We explicitly ask for 1000 per page to minimize API calls.
+            ticker_iterator = client.list_tickers(market='stocks', type=t_type, active=True, limit=1000)
             
-            # Sleep a tiny bit per ticker to guarantee ~15 seconds between API pagination calls
-            time.sleep(0.015) 
-            
-            if i > 0 and i % 1000 == 0:
-                print(f"  ... fetched {len(_VALID_TICKERS_CACHE)} tickers so far")
+            for i, t in enumerate(ticker_iterator):
+                if getattr(t, "ticker", None):
+                    _VALID_TICKERS_CACHE.add(t.ticker)
+                
+                # Sleep a tiny bit per ticker to guarantee ~15 seconds between API pagination calls
+                time.sleep(0.015) 
+                
+                if i > 0 and i % 1000 == 0:
+                    print(f"  ... fetched {len(_VALID_TICKERS_CACHE)} total tickers so far")
 
-        print(f"Found {len(_VALID_TICKERS_CACHE)} active common stock tickers.")
+        print(f"Found {len(_VALID_TICKERS_CACHE)} active CS and ADRC tickers.")
     except Exception as e:
         print(f"Error fetching valid tickers list: {e}")
         raise e
@@ -50,7 +55,7 @@ def get_entire_market_ohlcv(date, client):
             if getattr(agg, "ticker", None) in valid_tickers
         ]
 
-        print(f"--- Successfully pulled {len(filtered_data)} valid CS tickers for {date} (out of {len(all_market_data)} total) ---")
+        print(f"--- Successfully pulled {len(filtered_data)} valid CS/ADRC tickers for {date} (out of {len(all_market_data)} total) ---")
 
         data_dicts = [
             {
