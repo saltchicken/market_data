@@ -3,14 +3,20 @@ from sqlalchemy import text
 from .database import upload_to_postgres
 
 
-def get_entire_market_ohlcv(date, client):
-    """Fetches daily OHLCV for the entire US stock market for a specific date."""
+def get_entire_market_ohlcv(date, client, valid_tickers):
+    """Fetches daily OHLCV for the entire US stock market for a specific date, filtering for valid tickers."""
     try:
         all_market_data = client.get_grouped_daily_aggs(date)
         if not all_market_data:
             return None
 
-        print(f"--- Successfully pulled {len(all_market_data)} tickers for {date} ---")
+        # Instantly filter out warrants, units, preferred stocks using our pre-fetched set
+        filtered_data = [
+            agg for agg in all_market_data 
+            if getattr(agg, "ticker", None) in valid_tickers
+        ]
+
+        print(f"--- Successfully pulled {len(filtered_data)} valid CS tickers for {date} (out of {len(all_market_data)} total) ---")
 
         data_dicts = [
             {
@@ -24,11 +30,11 @@ def get_entire_market_ohlcv(date, client):
                 "timestamp": getattr(agg, "timestamp", None),
                 "transactions": getattr(agg, "transactions", None),
             }
-            for agg in all_market_data
+            for agg in filtered_data
         ]
 
         df = pd.DataFrame(data_dicts)
-        if "timestamp" in df.columns:
+        if not df.empty and "timestamp" in df.columns:
             df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms")
         return df
 
@@ -37,8 +43,8 @@ def get_entire_market_ohlcv(date, client):
         return None
 
 
-def fetch_and_upload(target_date, engine, client):
-    entire_market_data = get_entire_market_ohlcv(target_date, client)
+def fetch_and_upload(target_date, engine, client, valid_tickers):
+    entire_market_data = get_entire_market_ohlcv(target_date, client, valid_tickers)
     
     if entire_market_data is not None and not entire_market_data.empty:
         entire_market_data["market_date"] = pd.to_datetime(target_date).date()
