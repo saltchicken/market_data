@@ -2,6 +2,8 @@ SELECT
   ticker,
   market_date,
   close,
+  sma_50_dist_pct,
+  sma_200_dist_pct,
   ROUND(CAST(atr_14_pct AS NUMERIC), 2) AS atr_14_pct,
   atr_14,
   atr_5,
@@ -30,6 +32,8 @@ AND close_r2_3d > 0.5
 
 AND atr_14_pct IS NOT NULL
 AND rvol_sma_60 IS NOT NULL
+
+-- AND sma_50 > sma_200
 ORDER BY
   atr_14_pct DESC
 LIMIT 30
