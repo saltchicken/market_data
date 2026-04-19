@@ -9,8 +9,6 @@ from finvizfinance.screener.overview import Overview
 from finvizfinance.screener.valuation import Valuation
 from finvizfinance.screener.financial import Financial
 from finvizfinance.screener.ownership import Ownership
-from finvizfinance.screener.performance import Performance
-from finvizfinance.screener.technical import Technical
 
 
 def fetch_group_tickers(filters_dict: dict) -> pd.DataFrame:
@@ -28,8 +26,6 @@ def fetch_group_tickers(filters_dict: dict) -> pd.DataFrame:
         ("Valuation", Valuation),
         ("Financial", Financial),
         ("Ownership", Ownership),
-        ("Performance", Performance),
-        ("Technical", Technical),
     ]
 
     merged_df = None
@@ -98,12 +94,16 @@ def clean_columns_for_db(df: pd.DataFrame) -> pd.DataFrame:
         .str.replace("-", "_")
     )
 
-    # 2. Specific Renames (52w_high -> high_52w, etc.)
-    rename_map = {
-        "52w_high": "high_52w",
-        "52w_low": "low_52w"
-    }
-    df_db = df_db.rename(columns=rename_map)
+    # 2. Drop redundant columns that are locally calculated in the daily_indicators pipeline
+    redundant_columns = [
+        "price", "change", "volume", "avg_volume", "rel_volume",
+        "perf_week", "perf_month", "perf_quart", "perf_half", 
+        "perf_ytd", "perf_year", "perf_3y", "perf_5y", "perf_10y",
+        "gap", "change_from_open",
+        "sma20", "sma50", "sma200", "rsi", "atr", 
+        "volatility_w", "volatility_m"
+    ]
+    df_db = df_db.drop(columns=[col for col in redundant_columns if col in df_db.columns])
 
     # 3. Clean Data Types Safely
     for col in df_db.columns:
@@ -136,11 +136,32 @@ def clean_columns_for_db(df: pd.DataFrame) -> pd.DataFrame:
                 if converted_col.notna().sum() >= (original_valid * 0.5):
                     df_db[col] = converted_col
 
-    # 4. Numeric Rounding
+    # 5. Numeric Rounding
     numeric_cols = df_db.select_dtypes(include=['number']).columns
     df_db[numeric_cols] = df_db[numeric_cols].round(2)
 
     return df_db
+
+
+def init_database(db_url: str):
+    """Executes the init_schema.sql file to initialize the database schema."""
+    from sqlalchemy import create_engine, text
+    sql_file_path = os.path.join(os.path.dirname(__file__), "sql", "init_schema.sql")
+
+    if not os.path.exists(sql_file_path):
+        print(f"Error: SQL file not found at {sql_file_path}")
+        return
+
+    try:
+        engine = create_engine(db_url)
+        with engine.begin() as conn:
+            with open(sql_file_path, "r") as file:
+                sql_script = file.read()
+                conn.execute(text(sql_script))
+        print("Successfully initialized finviz_screener database schema.")
+    except Exception as e:
+        print(f"Database Initialization Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def main():
@@ -191,6 +212,11 @@ def main():
 
     args = parser.parse_args()
 
+    # Always initialize/reset the database schema for a clean table
+    if args.db_url:
+        print("\n=== Initializing clean database schema ===")
+        init_database(args.db_url)
+
     # Build the filter dictionary based on provided arguments
     filters = {}
     if args.sector:
@@ -231,7 +257,7 @@ def main():
     if args.db_url and args.db_table:
         print(f"\nExporting to PostgreSQL database table: '{args.db_table}'...")
         try:
-            from sqlalchemy import create_engine
+            from sqlalchemy import create_engine, text
 
             # Create SQLAlchemy engine
             engine = create_engine(args.db_url)
@@ -239,7 +265,7 @@ def main():
             # Clean dataframe column names to be Postgres friendly (e.g. "Market Cap" -> "market_cap")
             df_db = clean_columns_for_db(df)
 
-            # Changed from "replace" to "append" to keep historical data from previous days
+            # Append to the newly initialized (clean) table
             df_db.to_sql(args.db_table, engine, if_exists="append", index=False)
 
             print(f"Successfully appended to PostgreSQL table: {args.db_table}")

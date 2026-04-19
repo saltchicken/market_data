@@ -35,3 +35,4 @@ finviz_screener = "finviz_screener.__main__:main"
 "market_data" = ["sql/*.sql"]
 "market_query" = ["sql/*.sql"]
 "ibkr_alerts" = ["sql/*.sql"]
+"finviz_screener" = ["sql/*.sql"]
