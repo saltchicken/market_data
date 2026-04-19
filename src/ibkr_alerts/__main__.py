@@ -1,38 +1,10 @@
 import os
 import sys
+import datetime
+import pandas as pd
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
-from ib_insync import IB, Stock
-
-TICK_TYPE_MAP = {
-    # --- LIVE DATA ---
-    0: "Bid Size",
-    1: "Live Bid",
-    2: "Live Ask",
-    3: "Ask Size",
-    4: "Live Last Trade",
-    5: "Live Last Size",
-    6: "Live High",
-    7: "Live Low",
-    8: "Live Volume",
-    9: "Live Close",
-    14: "Live Open",
-    # --- DELAYED DATA ---
-    66: "Delayed Bid",
-    67: "Delayed Ask",
-    68: "Delayed Last Trade",
-    69: "Delayed Last Size",
-    72: "Delayed High",
-    73: "Delayed Low",
-    74: "Delayed Volume",
-    75: "Delayed Close",
-    76: "Delayed Open",
-    # --- OPTIONS & OTHER ---
-    24: "Option Implied Vol",
-    45: "Last Timestamp",
-    84: "Last Exchange",
-    86: "Futures Open Interest",
-}
+from ib_insync import IB, Stock, util
 
 
 def get_watchlist_from_db(db_url: str) -> list:
@@ -40,7 +12,7 @@ def get_watchlist_from_db(db_url: str) -> list:
     if not db_url:
         print("Error: DB_URL is not set in the environment variables.", file=sys.stderr)
         return []
-    
+
     try:
         engine = create_engine(db_url)
         with engine.connect() as conn:
@@ -53,89 +25,120 @@ def get_watchlist_from_db(db_url: str) -> list:
         return []
 
 
-def setup_contracts(ib: IB, symbols: list) -> list:
-    """Create and qualify contracts for the given symbols."""
+def on_bar_update(bars, hasNewBar):
+    """Callback function triggered when a new bar updates or closes."""
+    # ONLY run the heavy Pandas logic if a 5-minute candle has officially closed
+    if hasNewBar:
+        symbol = bars.contract.symbol
+
+        # Convert the ib_insync bars to a Pandas DataFrame
+        df = util.df(bars)
+        df.set_index("date", inplace=True)
+
+        # Resample to 30 minutes
+        ohlcv_dict = {
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+        }
+        df_30m = df.resample("30min").agg(ohlcv_dict).dropna()
+
+        # Here you can add your custom indicator calculations or alert triggers
+        print(f"[{symbol}] New 5m candle closed. Latest 30m state:")
+        print(df_30m.tail(1))
+        print("-" * 40)
+
+
+def subscribe_historical_bars(ib: IB, symbols: list) -> dict:
+    """Qualify contracts and stagger the historical data requests."""
     contracts = [Stock(symbol, "SMART", "USD") for symbol in symbols]
-    return ib.qualifyContracts(*contracts)
+    ib.qualifyContracts(*contracts)
 
+    live_bars = {}
+    print("\nInitializing historical data requests for PREMARKET...")
 
-def subscribe_market_data(ib: IB, contracts: list):
-    """Request real-time streaming data for qualified contracts."""
-    # 3 = Delayed data (or whatever tier applies based on subscriptions)
-    ib.reqMarketDataType(3)
     for contract in contracts:
-        ib.reqMktData(contract, "", False, False)
+        # Request a 15-minute historical seed to initialize the DataFrame, then switch to live
+        bars = ib.reqHistoricalData(
+            contract,
+            endDateTime="",
+            durationStr="900 S",
+            barSizeSetting="5 mins",
+            whatToShow="TRADES",
+            useRTH=False,  # CRITICAL: False allows premarket/after-hours data
+            keepUpToDate=True,
+        )
 
+        # Attach the event handler
+        bars.updateEvent += on_bar_update
 
-def process_pending_tickers(tickers):
-    """Callback function to process incoming ticker data updates."""
-    for t in tickers:
-        if not t.ticks:
-            print(f"[{t.contract.symbol}] Received empty tick data. Skipping...")
-            continue
-        
-        print(f"\n--- 📡 New Data Update for {t.contract.symbol} ---")
-        processed_ticks = []
+        # Store in our dictionary to keep the reference alive
+        live_bars[contract.symbol] = bars
 
-        for tick in t.ticks:
-            tick_name = TICK_TYPE_MAP.get(
-                tick.tickType, f"Unknown Tick ({tick.tickType})"
-            )
-            processed_ticks.append((tick.tickType, tick_name, tick.price, tick.size))
+        print(f"Subscribed to {contract.symbol}")
 
-        # Sort by tick type ID for consistent display
-        processed_ticks.sort(key=lambda x: x[0])
+        # Stagger requests by 2 seconds to avoid IBKR pacing violations
+        ib.sleep(2)
 
-        for tick_id, name, price, size in processed_ticks:
-            print(f"[{tick_id:02d}] {name:<18} | Price: {price:<8} | Size: {size}")
+    return live_bars
 
 
 def main():
     # 1. Load environment variables and fetch watchlist
     load_dotenv()
     db_url = os.getenv("DB_URL")
-    
+
     watch_list = get_watchlist_from_db(db_url)
-    
+
     if not watch_list:
         print("Watchlist is empty or could not be loaded from the database. Exiting.")
         sys.exit(1)
-        
+
     print(f"Loaded {len(watch_list)} active tickers from the database:")
     print(f"  -> {', '.join(watch_list)}\n")
+
+    # Optional guardrail: Warn if approaching the 50 simultaneous request limit
+    if len(watch_list) > 45:
+        print("⚠️ WARNING: Watchlist contains more than 45 tickers.", file=sys.stderr)
+        print(
+            "You are close to IBKR's hard limit of 50 simultaneous historical requests.",
+            file=sys.stderr,
+        )
 
     # 2. Initialize the IB connection
     ib = IB()
 
-    # Connect to IB Gateway running on your local machine on port 4002 for Paper Trading Account.
+    # Connect to IB Gateway running on your local machine (Port 4002 for Paper, 4001 for Live)
     try:
         ib.connect("127.0.0.1", 4002, clientId=1)
     except Exception as e:
         print(f"Failed to connect to IB Gateway: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # 3. Setup and qualify contracts
-    contracts = setup_contracts(ib, watch_list)
+    # 3. Subscribe to staggered historical bars
+    live_bars = subscribe_historical_bars(ib, watch_list)
 
-    if not contracts:
-        print("Could not qualify any contracts. Exiting.")
-        ib.disconnect()
-        sys.exit(1)
+    print("\nAll contracts subscribed. Listening for 5-minute candle closes...")
 
-    # 4. Request real-time streaming data
-    subscribe_market_data(ib, contracts)
+    # 4. Define end-of-day stop time (e.g., 1:05 PM PDT / 4:05 PM EDT)
+    stop_hour = 13
+    stop_minute = 5
 
-    print("Waiting for data stream to stabilize...")
-    ib.sleep(2)
-
-    # 5. Bind the extracted event handler
-    ib.pendingTickersEvent += process_pending_tickers
-
-    print("Streaming live market data... Press Ctrl+C to stop.")
-
-    # 6. Run the event loop safely
+    # 5. Time-aware event loop
     try:
-        ib.run()
+        while True:
+            # Sleep allows background events to fire while preventing CPU pegging
+            ib.sleep(60)
+
+            now = datetime.datetime.now()
+
+            # Check if we have reached or passed the stop time
+            if now.hour >= stop_hour and now.minute >= stop_minute:
+                print(f"\n⏰ Reached {stop_hour}:{stop_minute:02d}. Market is closed.")
+                break
+
     except KeyboardInterrupt:
         print("\n🛑 Ctrl+C detected. Stopping data stream...")
     finally:
