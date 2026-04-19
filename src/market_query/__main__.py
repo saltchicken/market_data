@@ -29,9 +29,9 @@ def main():
         help="Push the resulting tickers to the active IBKR watchlist rather than printing."
     )
     parser.add_argument(
-        "--clear", 
+        "--clear-all", 
         action="store_true", 
-        help="Deactivate all currently active tickers in the watchlist before adding new ones."
+        help="Delete ALL tickers in the entire watchlist."
     )
     parser.add_argument(
         "--limit", 
@@ -54,7 +54,7 @@ def main():
                 print(f"  - {script.replace('.sql', '')}")
         else:
             print("  (No sql directory found)")
-        print("\nUsage: market_query <name> [--ticker TICKER] [--watchlist] [--clear] [--limit LIMIT]")
+        print("\nUsage: market_query <name> [--ticker TICKER] [--watchlist] [--clear-all] [--limit LIMIT]")
         sys.exit(0)
 
     # Resolve the path to the SQL file
@@ -122,21 +122,27 @@ def main():
             active_optional_cols = [col for col in allowed_optional_cols if col in df_to_add.columns]
             
             with engine.begin() as conn:
-                if args.clear:
-                    print("🧹 Clearing currently active watchlist...")
-                    conn.execute(text("UPDATE watchlist SET is_active = FALSE"))
+                if args.clear_all:
+                    print("🧹 Deleting ENTIRE watchlist...")
+                    conn.execute(text("DELETE FROM watchlist"))
+                else:
+                    # AUTOMATICALLY clear old tickers for this specific strategy
+                    print(f"🧹 Automatically deleting old tickers for strategy: '{strategy_name}'...")
+                    conn.execute(
+                        text("DELETE FROM watchlist WHERE strategy = :strat"),
+                        {"strat": strategy_name}
+                    )
 
                 print(f"📝 Upserting tickers into watchlist tagged as '{strategy_name}'...")
                 if active_optional_cols:
                     print(f"   -> Including dynamic targets: {', '.join(active_optional_cols)}")
                 
                 # Build dynamic UPSERT SQL query
-                insert_cols = ['ticker', 'strategy', 'is_active'] + active_optional_cols
-                insert_vals = [':ticker', ':strategy', 'TRUE'] + [f':{col}' for col in active_optional_cols]
+                insert_cols = ['ticker', 'strategy'] + active_optional_cols
+                insert_vals = [':ticker', ':strategy'] + [f':{col}' for col in active_optional_cols]
                 
                 update_clauses = [
                     "strategy = EXCLUDED.strategy",
-                    "is_active = TRUE",
                     "updated_at = CURRENT_TIMESTAMP"
                 ]
                 
