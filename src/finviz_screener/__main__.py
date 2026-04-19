@@ -71,6 +71,22 @@ def clean_columns_for_db(df: pd.DataFrame) -> pd.DataFrame:
     """Formats column names to be strictly PostgreSQL-friendly and rounds numbers."""
     df_db = df.copy()
 
+    # Helper to parse T/B/M/K suffixes (e.g., 1.5B -> 1500000000.0)
+    def parse_suffix(val):
+        if isinstance(val, str):
+            val = val.strip()
+            if val and val[-1].upper() in ('T', 'B', 'M', 'K'):
+                try:
+                    num = float(val[:-1])
+                    mult = val[-1].upper()
+                    if mult == 'T': return num * 1e12
+                    if mult == 'B': return num * 1e9
+                    if mult == 'M': return num * 1e6
+                    if mult == 'K': return num * 1e3
+                except ValueError:
+                    pass
+        return val
+
     # 1. General cleaning (lowercase, replace spaces/special chars)
     df_db.columns = (
         df_db.columns.str.lower()
@@ -83,21 +99,44 @@ def clean_columns_for_db(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # 2. Specific Renames (52w_high -> high_52w, etc.)
-    # Note: The general cleaning above turns "52W High" into "52w_high"
     rename_map = {
         "52w_high": "high_52w",
         "52w_low": "low_52w"
     }
     df_db = df_db.rename(columns=rename_map)
 
+    # 3. Clean Data Types Safely
     for col in df_db.columns:
         if df_db[col].dtype == 'object': # If Pandas thinks it's text
-            if df_db[col].astype(str).str.contains('%').any():
-                # Strip the '%' and convert to a float
-                df_db[col] = df_db[col].astype(str).str.replace('%', '').astype(float)
+            # Replace Finviz missing value indicator exactly with None
+            df_db[col] = df_db[col].replace('-', None)
 
-    # 3. Numeric Rounding (The "I don't want to do this in SQL" fix)
-    # This rounds all float/int columns to 2 decimal places automatically
+            original_valid = df_db[col].notna().sum()
+            if original_valid == 0:
+                continue
+
+            # Parse T/B/M/K suffixes before attempting numeric coercion
+            df_db[col] = df_db[col].apply(parse_suffix)
+
+            # Safely check and convert percentage columns without crashing on text
+            if df_db[col].astype(str).str.contains('%').any():
+                stripped_col = df_db[col].astype(str).str.replace('%', '', regex=False)
+                
+                # Coerce errors so unconvertible text becomes NaN instead of crashing
+                converted_col = pd.to_numeric(stripped_col, errors='coerce')
+                
+                # Only apply the conversion if it didn't wipe out > 50% of the column's valid data.
+                # (This protects text columns like 'Company' if a single company has a '%' in its name)
+                if converted_col.notna().sum() >= (original_valid * 0.5):
+                    df_db[col] = converted_col
+            else:
+                # Catch other numbers formatted as text (e.g., P/E ratio that was skipped due to '-')
+                converted_col = pd.to_numeric(df_db[col], errors='coerce')
+                
+                if converted_col.notna().sum() >= (original_valid * 0.5):
+                    df_db[col] = converted_col
+
+    # 4. Numeric Rounding
     numeric_cols = df_db.select_dtypes(include=['number']).columns
     df_db[numeric_cols] = df_db[numeric_cols].round(2)
 
