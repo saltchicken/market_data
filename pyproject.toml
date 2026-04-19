@@ -19,15 +19,13 @@ dependencies = [
     "psycopg2-binary",
     "tqdm",
     "plotly",
-    "financedatabase", # needed for ticker_data
     "ib_insync>=0.9.82", # needed for ibkr_alerts
-    "finvizfinance>=0.14.7", # needed for finvix_viewer
+    "finvizfinance>=0.14.7", # needed for finviz_viewer
 ]
 
 [project.scripts]
 market_data = "market_data.__main__:main"
 market_query = "market_query.__main__:main"
-ticker_data = "ticker_data.__main__:main"
 ibkr_alerts = "ibkr_alerts.__main__:main"
 finviz_screener = "finviz_screener.__main__:main"
 
