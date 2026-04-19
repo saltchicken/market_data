@@ -18,6 +18,7 @@ dependencies = [
     "sqlalchemy",
     "psycopg2-binary",
     "tqdm",
+    "plotly",
     "financedatabase", # needed for ticker_data
     "ib_insync>=0.9.82", # needed for ibkr_alerts
     "finvizfinance>=0.14.7", # needed for finvix_viewer
