@@ -11,6 +11,21 @@ CREATE TABLE watchlist (
     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 1. Create a function to automatically update the timestamp
+CREATE OR REPLACE FUNCTION update_watchlist_changetimestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = NOW();
+   RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- 2. Attach the trigger to the watchlist table
+CREATE TRIGGER trg_watchlist_updated_at
+BEFORE UPDATE ON watchlist
+FOR EACH ROW
+EXECUTE FUNCTION update_watchlist_changetimestamp();
+
 COMMENT ON TABLE watchlist IS 'Active symbols and alert thresholds monitored by IBKR.';
 COMMENT ON COLUMN watchlist.strategy IS 'Strategy that was used to identify the symbol.';
 COMMENT ON COLUMN watchlist.is_active IS 'Boolean flag to easily pause monitoring for a symbol without deleting it.';
