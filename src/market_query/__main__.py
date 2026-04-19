@@ -42,6 +42,37 @@ def main():
 
     args = parser.parse_args()
 
+    # Load environment variables EARLY so we can process standalone flags
+    load_dotenv()
+    db_url = os.getenv("DB_URL")
+
+    if not db_url:
+        print("Error: Missing DB_URL in .env file.")
+        sys.exit(1)
+        
+    try:
+        engine = create_engine(db_url)
+    except Exception as e:
+        print(f"Error connecting to database: {e}")
+        sys.exit(1)
+
+    # --- INDEPENDENT CLEAR LOGIC ---
+    # Executes immediately regardless of whether we are running a query or pushing to the watchlist
+    if args.clear_all:
+        print("🧹 Deleting ENTIRE watchlist...")
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("DELETE FROM watchlist"))
+            print("✅ Watchlist completely cleared.")
+        except Exception as e:
+            print(f"Error clearing watchlist: {e}")
+            sys.exit(1)
+            
+        # If the user just ran `market_query --clear-all` with no query, exit cleanly.
+        if not args.query_name:
+            sys.exit(0)
+
+
     package_dir = os.path.dirname(os.path.abspath(__file__))
     sql_dir = os.path.join(package_dir, "sql")
 
@@ -74,14 +105,6 @@ def main():
         print("Run 'market_query list' to see available options.")
         sys.exit(1)
 
-    # Load environment variables
-    load_dotenv()
-    db_url = os.getenv("DB_URL")
-
-    if not db_url:
-        print("Error: Missing DB_URL in .env file.")
-        sys.exit(1)
-
     # Read the SQL query from the resolved file path
     with open(sql_path, "r") as file:
         query = file.read()
@@ -89,8 +112,6 @@ def main():
     # Connect to the database and run the query
     print(f"🔍 Executing query from {sql_path}...\n")
     try:
-        engine = create_engine(db_url)
-
         # Set up our query parameters
         params = {}
         if args.ticker:
@@ -122,10 +143,8 @@ def main():
             active_optional_cols = [col for col in allowed_optional_cols if col in df_to_add.columns]
             
             with engine.begin() as conn:
-                if args.clear_all:
-                    print("🧹 Deleting ENTIRE watchlist...")
-                    conn.execute(text("DELETE FROM watchlist"))
-                else:
+                # We only need to clear the specific strategy if we didn't just clear the entire DB
+                if not args.clear_all:
                     # AUTOMATICALLY clear old tickers for this specific strategy
                     print(f"🧹 Automatically deleting old tickers for strategy: '{strategy_name}'...")
                     conn.execute(
@@ -182,6 +201,10 @@ def main():
             pd.set_option("display.max_columns", None)
             pd.set_option("display.width", 1000)
             print(df)
+            
+            if args.clear_all:
+                print("\n⚠️  Note: The watchlist in the database was cleared, but the results above were NOT saved to it.")
+                print("    Run the command again with the '--watchlist' (-w) flag if you meant to save them.")
 
     except Exception as e:
         print(f"An error occurred while running the query:\n{e}")
