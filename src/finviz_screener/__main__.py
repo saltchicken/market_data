@@ -143,6 +143,32 @@ def clean_columns_for_db(df: pd.DataFrame) -> pd.DataFrame:
     return df_db
 
 
+def upsert_finviz_data(df: pd.DataFrame, table_name: str, engine):
+    """Upserts dataframe into PostgreSQL using ON CONFLICT DO UPDATE."""
+    from sqlalchemy import MetaData, Table
+    from sqlalchemy.dialects.postgresql import insert
+
+    # Replace NaN with None so SQLAlchemy inserts NULLs instead of crashing on 'NaN' floats
+    clean_df = df.where(pd.notnull(df), None)
+    records = clean_df.to_dict(orient='records')
+
+    metadata = MetaData()
+    table = Table(table_name, metadata, autoload_with=engine)
+
+    stmt = insert(table).values(records)
+    
+    # Update all columns except the primary keys if a conflict occurs
+    update_dict = {c.name: c for c in stmt.excluded if c.name not in ['ticker', 'date']}
+
+    upsert_stmt = stmt.on_conflict_do_update(
+        index_elements=['ticker', 'date'],
+        set_=update_dict
+    )
+
+    with engine.begin() as conn:
+        conn.execute(upsert_stmt)
+
+
 def init_database(db_url: str):
     """Executes the init_schema.sql file to initialize the database schema."""
     from sqlalchemy import create_engine, text
@@ -265,10 +291,10 @@ def main():
             # Clean dataframe column names to be Postgres friendly (e.g. "Market Cap" -> "market_cap")
             df_db = clean_columns_for_db(df)
 
-            # Append to the newly initialized (clean) table
-            df_db.to_sql(args.db_table, engine, if_exists="append", index=False)
+            # Upsert into the table to avoid UniqueViolation errors on reruns
+            upsert_finviz_data(df_db, args.db_table, engine)
 
-            print(f"Successfully appended to PostgreSQL table: {args.db_table}")
+            print(f"Successfully upserted data to PostgreSQL table: {args.db_table}")
 
         except ImportError:
             print("\nError: Missing database dependencies.", file=sys.stderr)
