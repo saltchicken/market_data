@@ -8,17 +8,38 @@ from sqlalchemy import create_engine, text
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run analytical SQL queries against the database."
+        description="Run analytical SQL queries against the database and optionally build a watchlist."
     )
+    
+    # Query arguments
     parser.add_argument(
         "query_name",
         nargs="?",
-        help="Name of the query to run (e.g., golden_cross_screener) or 'list' to see available queries.",
+        help="Name of the query to run (e.g., golden_cross) or 'list' to see available queries.",
     )
-    # Add a new optional argument for the ticker
     parser.add_argument(
         "--ticker", "-t", type=str, help="Specific ticker to filter by", default=None
     )
+
+    # Watchlist arguments
+    parser.add_argument(
+        "--watchlist", 
+        "-w", 
+        action="store_true", 
+        help="Push the resulting tickers to the active IBKR watchlist rather than printing."
+    )
+    parser.add_argument(
+        "--clear", 
+        action="store_true", 
+        help="Deactivate all currently active tickers in the watchlist before adding new ones."
+    )
+    parser.add_argument(
+        "--limit", 
+        type=int, 
+        default=20, 
+        help="Maximum number of tickers to add to the watchlist (IBKR has a ~50 ticker streaming limit)."
+    )
+
     args = parser.parse_args()
 
     package_dir = os.path.dirname(os.path.abspath(__file__))
@@ -33,7 +54,7 @@ def main():
                 print(f"  - {script.replace('.sql', '')}")
         else:
             print("  (No sql directory found)")
-        print("\nUsage: market_query <name> [--ticker TICKER]")
+        print("\nUsage: market_query <name> [--ticker TICKER] [--watchlist] [--clear] [--limit LIMIT]")
         sys.exit(0)
 
     # Resolve the path to the SQL file
@@ -66,7 +87,7 @@ def main():
         query = file.read()
 
     # Connect to the database and run the query
-    print(f"Executing query from {sql_path}...\n")
+    print(f"🔍 Executing query from {sql_path}...\n")
     try:
         engine = create_engine(db_url)
 
@@ -80,6 +101,44 @@ def main():
 
         if df.empty:
             print("Query executed successfully but returned no results.")
+            sys.exit(0)
+
+        # --- COMBINED LOGIC: Push to Watchlist OR Print to Terminal ---
+        if args.watchlist:
+            if 'ticker' not in df.columns:
+                print("Error: No 'ticker' column found in query results. Watchlist remains unchanged.")
+                sys.exit(1)
+
+            # Apply limit to avoid hitting IBKR pacing/streaming limits
+            tickers_to_add = df['ticker'].head(args.limit).tolist()
+            print(f"✅ Strategy found {len(df)} tickers. Taking top {len(tickers_to_add)}...")
+
+            strategy_name = os.path.basename(sql_path).replace('.sql', '')
+            
+            with engine.begin() as conn:
+                if args.clear:
+                    print("🧹 Clearing currently active watchlist...")
+                    conn.execute(text("UPDATE watchlist SET is_active = FALSE"))
+
+                print(f"📝 Upserting tickers into watchlist tagged as '{strategy_name}'...")
+                
+                # Upsert logic: Insert new, or update existing to be active with the new strategy
+                upsert_query = text("""
+                    INSERT INTO watchlist (ticker, strategy, is_active)
+                    VALUES (:ticker, :strategy, TRUE)
+                    ON CONFLICT (ticker) DO UPDATE 
+                    SET strategy = EXCLUDED.strategy, 
+                        is_active = TRUE,
+                        updated_at = CURRENT_TIMESTAMP;
+                """)
+                
+                for ticker in tickers_to_add:
+                    conn.execute(upsert_query, {"ticker": ticker, "strategy": strategy_name})
+                    
+            print(f"\n🚀 Watchlist updated successfully! Tickers added/activated:")
+            print(", ".join(tickers_to_add))
+            print("\nYou can now start IBKR alerts by running: ibkr_alerts")
+
         else:
             # Print all rows and columns nicely formatted in the terminal
             pd.set_option("display.max_rows", None)
@@ -89,7 +148,7 @@ def main():
 
     except Exception as e:
         print(f"An error occurred while running the query:\n{e}")
-
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
