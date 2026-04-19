@@ -16,7 +16,7 @@ def get_watchlist_from_db(db_url: str) -> list:
     try:
         engine = create_engine(db_url)
         with engine.connect() as conn:
-            query = text("SELECT ticker FROM watchlist WHERE is_active = TRUE;")
+            query = text("SELECT ticker FROM watchlist WHERE is_active = TRUE LIMIT 50;")
             result = conn.execute(query)
             tickers = [row[0] for row in result]
         return tickers
