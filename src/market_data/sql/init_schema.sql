@@ -3,6 +3,7 @@ DROP TABLE IF EXISTS daily_indicators CASCADE;
 
 CREATE TABLE daily_market_data (
     ticker TEXT NOT NULL,
+    asset_class TEXT NOT NULL,
     market_date DATE NOT NULL,
     open DOUBLE PRECISION,
     high DOUBLE PRECISION,

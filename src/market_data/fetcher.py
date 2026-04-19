@@ -15,7 +15,8 @@ def _get_valid_tickers(client):
     print(
         "\nFetching valid Common Stock (CS) and ADR (ADRC) tickers from Polygon (Throttled for API limits)..."
     )
-    _VALID_TICKERS_CACHE = set()
+    # Changed from a set() to a dict() so we can store the asset class type
+    _VALID_TICKERS_CACHE = {}
 
     ticker_types = ["CS", "ADRC"]
 
@@ -29,7 +30,8 @@ def _get_valid_tickers(client):
 
             for i, t in enumerate(ticker_iterator):
                 if getattr(t, "ticker", None):
-                    _VALID_TICKERS_CACHE.add(t.ticker)
+                    # Map the ticker to its type
+                    _VALID_TICKERS_CACHE[t.ticker] = t_type
 
                 # Sleep a tiny bit per ticker to guarantee ~15 seconds between API pagination calls
                 time.sleep(0.015)
@@ -39,7 +41,11 @@ def _get_valid_tickers(client):
                         f"  ... fetched {len(_VALID_TICKERS_CACHE)} total tickers so far"
                     )
 
-        print(f"Found {len(_VALID_TICKERS_CACHE)} active CS and ADRC tickers.")
+        # Explicitly add SPY (and any other specific ETFs) and tag them as "ETF"
+        _VALID_TICKERS_CACHE["SPY"] = "ETF"
+        _VALID_TICKERS_CACHE["QQQ"] = "ETF"
+
+        print(f"Found {len(_VALID_TICKERS_CACHE)} active CS and ADRC tickers (including SPY).")
     except Exception as e:
         print(f"Error fetching valid tickers list: {e}")
         raise e
@@ -65,12 +71,13 @@ def get_entire_market_ohlcv(date, client):
         ]
 
         print(
-            f"--- Successfully pulled {len(filtered_data)} valid CS/ADRC tickers for {date} (out of {len(all_market_data)} total) ---"
+            f"--- Successfully pulled {len(filtered_data)} valid CS/ADRC/ETF tickers for {date} (out of {len(all_market_data)} total) ---"
         )
 
         data_dicts = [
             {
                 "ticker": getattr(agg, "ticker", None),
+                "asset_class": valid_tickers.get(getattr(agg, "ticker", None)), # Inject the asset class here
                 "open": getattr(agg, "open", None),
                 "high": getattr(agg, "high", None),
                 "low": getattr(agg, "low", None),
