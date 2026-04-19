@@ -1,3 +1,7 @@
+import os
+import sys
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
 from ib_insync import IB, Stock
 
 TICK_TYPE_MAP = {
@@ -30,11 +34,23 @@ TICK_TYPE_MAP = {
     86: "Futures Open Interest",
 }
 
-WATCH_LIST = {
-    "AAPL": {"breakout_price": 175.50, "volume_surge": 5000000},
-    "MSFT": {"breakout_price": 410.00, "volume_surge": 3000000},
-    "INVALID": {"breakout_price": 180.00, "volume_surge": 10000000}
-}
+
+def get_watchlist_from_db(db_url: str) -> list:
+    """Fetch the active watchlist tickers from the PostgreSQL database."""
+    if not db_url:
+        print("Error: DB_URL is not set in the environment variables.", file=sys.stderr)
+        return []
+    
+    try:
+        engine = create_engine(db_url)
+        with engine.connect() as conn:
+            query = text("SELECT ticker FROM watchlist WHERE is_active = TRUE;")
+            result = conn.execute(query)
+            tickers = [row[0] for row in result]
+        return tickers
+    except Exception as e:
+        print(f"Error fetching watchlist from database: {e}", file=sys.stderr)
+        return []
 
 
 def setup_contracts(ib: IB, symbols: list) -> list:
@@ -75,28 +91,49 @@ def process_pending_tickers(tickers):
 
 
 def main():
-    # 1. Initialize the IB connection
+    # 1. Load environment variables and fetch watchlist
+    load_dotenv()
+    db_url = os.getenv("DB_URL")
+    
+    watch_list = get_watchlist_from_db(db_url)
+    
+    if not watch_list:
+        print("Watchlist is empty or could not be loaded from the database. Exiting.")
+        sys.exit(1)
+        
+    print(f"Loaded {len(watch_list)} active tickers from the database:")
+    print(f"  -> {', '.join(watch_list)}\n")
+
+    # 2. Initialize the IB connection
     ib = IB()
 
     # Connect to IB Gateway running on your local machine on port 4002 for Paper Trading Account.
-    ib.connect("127.0.0.1", 4002, clientId=1)
+    try:
+        ib.connect("127.0.0.1", 4002, clientId=1)
+    except Exception as e:
+        print(f"Failed to connect to IB Gateway: {e}", file=sys.stderr)
+        sys.exit(1)
 
-    # 2. Setup and qualify contracts
-    symbols = list(WATCH_LIST.keys())
-    contracts = setup_contracts(ib, symbols)
+    # 3. Setup and qualify contracts
+    contracts = setup_contracts(ib, watch_list)
 
-    # 3. Request real-time streaming data
+    if not contracts:
+        print("Could not qualify any contracts. Exiting.")
+        ib.disconnect()
+        sys.exit(1)
+
+    # 4. Request real-time streaming data
     subscribe_market_data(ib, contracts)
 
     print("Waiting for data stream to stabilize...")
     ib.sleep(2)
 
-    # 4. Bind the extracted event handler
+    # 5. Bind the extracted event handler
     ib.pendingTickersEvent += process_pending_tickers
 
     print("Streaming live market data... Press Ctrl+C to stop.")
 
-    # 5. Run the event loop safely
+    # 6. Run the event loop safely
     try:
         ib.run()
     except KeyboardInterrupt:
