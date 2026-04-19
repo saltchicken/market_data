@@ -16,8 +16,6 @@ def get_watchlist_from_db(db_url: str) -> list:
     try:
         engine = create_engine(db_url)
         with engine.connect() as conn:
-            # Added ORDER BY updated_at DESC so the most recently added/updated 
-            # tickers are prioritized if the active count exceeds IBKR's 50 limit.
             query = text("""
                 SELECT ticker 
                 FROM watchlist 
