@@ -2,6 +2,11 @@ SELECT
   ticker,
   market_date,
   close,
+  
+  -- Target Limit Orders automatically picked up by market_query mapping
+  ROUND(CAST(close * 0.98 AS NUMERIC), 2) AS target_buy,
+  ROUND(CAST(close * 1.05 AS NUMERIC), 2) AS target_sell,
+
   sma_50_dist_pct,
   sma_200_dist_pct,
   ROUND(CAST(atr_14_pct AS NUMERIC), 2) AS atr_14_pct,

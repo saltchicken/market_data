@@ -110,10 +110,16 @@ def main():
                 sys.exit(1)
 
             # Apply limit to avoid hitting IBKR pacing/streaming limits
-            tickers_to_add = df['ticker'].head(args.limit).tolist()
+            df_to_add = df.head(args.limit)
+            tickers_to_add = df_to_add['ticker'].tolist()
+            
             print(f"✅ Strategy found {len(df)} tickers. Taking top {len(tickers_to_add)}...")
 
             strategy_name = os.path.basename(sql_path).replace('.sql', '')
+            
+            # Dynamically match columns from the query to allowed watchlist columns
+            allowed_optional_cols = ['target_buy', 'target_sell', 'target_volume']
+            active_optional_cols = [col for col in allowed_optional_cols if col in df_to_add.columns]
             
             with engine.begin() as conn:
                 if args.clear:
@@ -121,19 +127,44 @@ def main():
                     conn.execute(text("UPDATE watchlist SET is_active = FALSE"))
 
                 print(f"📝 Upserting tickers into watchlist tagged as '{strategy_name}'...")
+                if active_optional_cols:
+                    print(f"   -> Including dynamic targets: {', '.join(active_optional_cols)}")
                 
-                # Upsert logic: Insert new, or update existing to be active with the new strategy
-                upsert_query = text("""
-                    INSERT INTO watchlist (ticker, strategy, is_active)
-                    VALUES (:ticker, :strategy, TRUE)
+                # Build dynamic UPSERT SQL query
+                insert_cols = ['ticker', 'strategy', 'is_active'] + active_optional_cols
+                insert_vals = [':ticker', ':strategy', 'TRUE'] + [f':{col}' for col in active_optional_cols]
+                
+                update_clauses = [
+                    "strategy = EXCLUDED.strategy",
+                    "is_active = TRUE",
+                    "updated_at = CURRENT_TIMESTAMP"
+                ]
+                
+                # If a value updates, we want to overwrite it in the DB
+                for col in active_optional_cols:
+                    update_clauses.append(f"{col} = EXCLUDED.{col}")
+                    
+                upsert_query = text(f"""
+                    INSERT INTO watchlist ({', '.join(insert_cols)})
+                    VALUES ({', '.join(insert_vals)})
                     ON CONFLICT (ticker) DO UPDATE 
-                    SET strategy = EXCLUDED.strategy, 
-                        is_active = TRUE,
-                        updated_at = CURRENT_TIMESTAMP;
+                    SET {', '.join(update_clauses)};
                 """)
                 
-                for ticker in tickers_to_add:
-                    conn.execute(upsert_query, {"ticker": ticker, "strategy": strategy_name})
+                # Iterate through dataframe as dictionary records to inject into DB
+                records = df_to_add.to_dict(orient="records")
+                for record in records:
+                    sql_params = {
+                        "ticker": record['ticker'],
+                        "strategy": strategy_name
+                    }
+                    
+                    # Format optional target values. Convert NaN values to None for Postgres.
+                    for col in active_optional_cols:
+                        val = record[col]
+                        sql_params[col] = None if pd.isna(val) else val
+                        
+                    conn.execute(upsert_query, sql_params)
                     
             print(f"\n🚀 Watchlist updated successfully! Tickers added/activated:")
             print(", ".join(tickers_to_add))
