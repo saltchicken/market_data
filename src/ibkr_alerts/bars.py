@@ -1,4 +1,5 @@
 import logging
+import datetime
 import pandas as pd
 from ib_insync import IB, Stock, util
 from .alerts import trigger_alert
@@ -8,8 +9,9 @@ logger = logging.getLogger("ibkr_alerts")
 def create_bar_handler(targets_dict: dict):
     """Factory function to create a closure that holds the target dictionaries."""
     
-    # State tracker to prevent gap alerts from spamming every 5 minutes
+    # State trackers
     alerted_gaps = set()
+    open_gap_logged = set()
     
     def on_bar_update(bars, hasNewBar):
         """Callback function triggered when a new bar updates or closes."""
@@ -20,6 +22,10 @@ def create_bar_handler(targets_dict: dict):
             # Convert the ib_insync bars to a Pandas DataFrame
             df = util.df(bars)
             df.set_index("date", inplace=True)
+
+            # Get the time of the newly closed 5-minute bar
+            latest_time = df.index[-1].time()
+            market_open_time = datetime.time(9, 30)
 
             # Resample to 30 minutes
             ohlcv_dict = {
@@ -45,19 +51,28 @@ def create_bar_handler(targets_dict: dict):
             t_sell = symbol_targets.get('target_sell')
             prev_close = symbol_targets.get('prev_close')
 
-            # --- PREMARKET GAP CALCULATION ---
+            # --- PREMARKET GAP & MARKET OPEN CALCULATION ---
             gap_str = ""
             if prev_close and prev_close > 0:
-                gap_pct = ((latest_close - prev_close) / prev_close) * 100
-                gap_str = f" | Gap: {gap_pct:+.2f}%"
+                current_change_pct = ((latest_close - prev_close) / prev_close) * 100
                 
-                # Optional: Trigger an alert if premarket gap is huge (e.g. > 5% or < -5%)
-                if abs(gap_pct) >= 5.0 and symbol not in alerted_gaps:
-                    direction = "UP" if gap_pct > 0 else "DOWN"
-                    trigger_alert(f"📈 PREMARKET GAP {direction}", f"{symbol} is gapping {gap_pct:+.2f}% to ${latest_close:.2f}!")
-                    alerted_gaps.add(symbol) # Prevent spamming this alert
+                if latest_time < market_open_time:
+                    # 1. PREMARKET: Log as Pre-Gap and check for extreme alerts
+                    gap_str = f" | Pre-Gap: {current_change_pct:+.2f}%"
+                    
+                    if abs(current_change_pct) >= 5.0 and symbol not in alerted_gaps:
+                        direction = "UP" if current_change_pct > 0 else "DOWN"
+                        trigger_alert(f"📈 PREMARKET GAP {direction}", f"{symbol} is gapping {current_change_pct:+.2f}% to ${latest_close:.2f}!")
+                        alerted_gaps.add(symbol)
+                else:
+                    # 2. REGULAR TRADING HOURS: Log official open gap once, then track Day Change
+                    if symbol not in open_gap_logged:
+                        logger.info(f"🔔 [{symbol}] MARKET OPEN | Official Gap: {current_change_pct:+.2f}% at ${latest_close:.2f}")
+                        open_gap_logged.add(symbol)
+                    
+                    gap_str = f" | Day Chg: {current_change_pct:+.2f}%"
 
-            # Standard Info logging for regular 30m closes (Now includes gap visibility)
+            # Standard Info logging for regular 30m closes
             logger.info(f"[{symbol}] 30m Closed | Close: ${latest_close:.2f}{gap_str} | Vol: {latest_volume:,.0f}")
 
             # --- TARGET ALERTS ---
