@@ -8,6 +8,9 @@ logger = logging.getLogger("ibkr_alerts")
 def create_bar_handler(targets_dict: dict):
     """Factory function to create a closure that holds the target dictionaries."""
     
+    # State tracker to prevent gap alerts from spamming every 5 minutes
+    alerted_gaps = set()
+    
     def on_bar_update(bars, hasNewBar):
         """Callback function triggered when a new bar updates or closes."""
         # ONLY run the heavy Pandas logic if a 5-minute candle has officially closed
@@ -35,16 +38,29 @@ def create_bar_handler(targets_dict: dict):
             latest_volume = latest_30m['volume']
             latest_close = latest_30m['close']
             
-            # Fetch specific targets for this symbol
+            # Fetch specific targets and the previous day's close for this symbol
             symbol_targets = targets_dict.get(symbol, {})
             t_vol = symbol_targets.get('target_volume')
             t_buy = symbol_targets.get('target_buy')
             t_sell = symbol_targets.get('target_sell')
+            prev_close = symbol_targets.get('prev_close')
 
-            # Standard Info logging for regular 30m closes
-            logger.info(f"[{symbol}] 30m Closed | Close: ${latest_close:.2f} | Vol: {latest_volume:,.0f}")
+            # --- PREMARKET GAP CALCULATION ---
+            gap_str = ""
+            if prev_close and prev_close > 0:
+                gap_pct = ((latest_close - prev_close) / prev_close) * 100
+                gap_str = f" | Gap: {gap_pct:+.2f}%"
+                
+                # Optional: Trigger an alert if premarket gap is huge (e.g. > 5% or < -5%)
+                if abs(gap_pct) >= 5.0 and symbol not in alerted_gaps:
+                    direction = "UP" if gap_pct > 0 else "DOWN"
+                    trigger_alert(f"📈 PREMARKET GAP {direction}", f"{symbol} is gapping {gap_pct:+.2f}% to ${latest_close:.2f}!")
+                    alerted_gaps.add(symbol) # Prevent spamming this alert
 
-            # --- ALERT LOGIC ---
+            # Standard Info logging for regular 30m closes (Now includes gap visibility)
+            logger.info(f"[{symbol}] 30m Closed | Close: ${latest_close:.2f}{gap_str} | Vol: {latest_volume:,.0f}")
+
+            # --- TARGET ALERTS ---
             if t_vol and latest_volume >= t_vol:
                 trigger_alert("🚨 VOLUME SURGE", f"{symbol} volume ({latest_volume:,.0f}) exceeded target ({t_vol:,.0f})!")
                 

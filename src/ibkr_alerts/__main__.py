@@ -19,19 +19,21 @@ def main():
     load_dotenv()
     db_url = os.getenv("DB_URL")
 
-    # Fetch the rich watchlist including targets
+    # Fetch the rich watchlist including targets and previous closes
     watch_targets = get_watchlist_targets_from_db(db_url)
 
     if not watch_targets:
         logger.error("Watchlist is empty or could not be loaded from the database. Exiting.")
         sys.exit(1)
 
-    logger.info(f"Loaded {len(watch_targets)} active tickers and targets from the database:")
+    logger.info(f"Loaded {len(watch_targets)} active tickers from the database:")
     for ticker, data in watch_targets.items():
+        prev_close_str = f"${data['prev_close']:.2f}" if data['prev_close'] else "N/A"
         vol_str = f"{data['target_volume']:,.0f}" if data['target_volume'] else "None"
         buy_str = f"${data['target_buy']:.2f}" if data['target_buy'] else "None"
         sell_str = f"${data['target_sell']:.2f}" if data['target_sell'] else "None"
-        logger.info(f"  -> {ticker}: Vol={vol_str} | Buy={buy_str} | Sell={sell_str}")
+        
+        logger.info(f"  -> {ticker}: Prev Close={prev_close_str} | Vol={vol_str} | Buy={buy_str} | Sell={sell_str}")
 
     if len(watch_targets) > 45:
         logger.warning("WARNING: You are close to IBKR's hard limit of 50 simultaneous historical requests.")
@@ -48,7 +50,7 @@ def main():
     # Pass the targets directly into the subscription manager
     live_bars = subscribe_historical_bars(ib, watch_targets)
 
-    logger.info("All contracts subscribed. Listening for 5-minute candle closes...")
+    logger.info("All contracts subscribed. Listening for premarket/RTH candle closes...")
 
     stop_hour = 13
     stop_minute = 5
