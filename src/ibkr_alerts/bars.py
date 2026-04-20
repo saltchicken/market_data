@@ -26,18 +26,22 @@ def create_bar_handler(targets_dict: dict):
             df = util.df(bars)
             df.set_index("date", inplace=True)
 
-            # NOTE: ib_insync includes the currently forming (live) candle at the end of the list.
-            # We drop the last row so we are only evaluating and resampling fully CLOSED candles.
+            # NOTE: Drop the currently forming (live) candle.
+            # We only evaluate fully closed 5-minute candles.
             closed_df = df.iloc[:-1]
             
             if closed_df.empty:
                 return
 
-            # Get the time of the newly closed 5-minute bar
+            # --- 1. Extract the Latest 5-Minute Closed Candle ---
+            latest_5m = closed_df.iloc[-1]
             latest_time = closed_df.index[-1].time()
-            market_open_time = datetime.time(6, 30) # This assumes PST
+            latest_close = latest_5m["close"]
+            latest_5m_vol = latest_5m["volume"]
 
-            # Resample strictly completed 5m bars to 30 minutes
+            market_open_time = datetime.time(6, 30) # Assumes PST/PDT
+
+            # --- 2. Resample to Track the 30-Minute Bucket ---
             ohlcv_dict = {
                 "open": "first",
                 "high": "max",
@@ -50,10 +54,9 @@ def create_bar_handler(targets_dict: dict):
             if df_30m.empty:
                 return
 
-            # Because we stripped the live candle, iloc[-1] is now the fully completed 30m bucket
-            latest_30m = df_30m.iloc[-1]
-            latest_volume = latest_30m["volume"]
-            latest_close = latest_30m["close"]
+            # This bucket is "live" and filling up until the :25 or :55 candle closes
+            current_30m_bucket = df_30m.iloc[-1]
+            current_30m_vol = current_30m_bucket["volume"]
 
             # Fetch specific targets and the previous day's close for this symbol
             symbol_targets = targets_dict.get(symbol, {})
@@ -90,30 +93,40 @@ def create_bar_handler(targets_dict: dict):
 
             # Standard Info logging for regular 5m closes
             logger.info(
-                f"[{symbol}] 5m Closed (30m Bucket Update) | Close: ${latest_close:.2f}{gap_str} | Vol: {latest_volume:,.0f}"
+                f"[{symbol}] 5m Closed at {latest_time.strftime('%H:%M')} | Close: ${latest_close:.2f}{gap_str} | 5m Vol: {latest_5m_vol:,.0f}"
             )
 
-            # --- TARGET ALERTS (Debounced) ---
-            if t_vol and latest_volume >= t_vol and symbol not in alerted_volume:
+            # --- TARGET ALERTS (Evaluated every 5 mins) ---
+            
+            # Volume Alert: Early Warning System against the cumulative 30m target
+            if t_vol and current_30m_vol >= t_vol and symbol not in alerted_volume:
                 trigger_alert(
                     "🚨 VOLUME SURGE",
-                    f"{symbol} volume ({latest_volume:,.0f}) exceeded target ({t_vol:,.0f})!",
+                    f"{symbol} 30m running volume ({current_30m_vol:,.0f}) exceeded target ({t_vol:,.0f}) early at {latest_time.strftime('%H:%M')}!",
                 )
-                alerted_volume.add(symbol)  # Ensure we only alert once
+                alerted_volume.add(symbol)
 
+            # Price Alerts: Evaluated immediately on the 5m close to reduce slippage
             if t_buy and latest_close <= t_buy and symbol not in alerted_buy:
                 trigger_alert(
                     "💸 BUY TARGET REACHED",
                     f"{symbol} dropped to ${latest_close:.2f} (Target: ${t_buy:.2f})!",
                 )
-                alerted_buy.add(symbol)  # Ensure we only alert once
+                alerted_buy.add(symbol)
 
             if t_sell and latest_close >= t_sell and symbol not in alerted_sell:
                 trigger_alert(
                     "💰 SELL TARGET REACHED",
                     f"{symbol} climbed to ${latest_close:.2f} (Target: ${t_sell:.2f})!",
                 )
-                alerted_sell.add(symbol)  # Ensure we only alert once
+                alerted_sell.add(symbol)
+
+            # --- OFFICIAL 30-MINUTE BUCKET LOGGING ---
+            # A 30m bucket is only fully complete when the 5m candle stamped at xx:25 or xx:55 closes.
+            if latest_time.minute in (25, 55):
+                logger.info(
+                    f"📦 [{symbol}] 30m BUCKET COMPLETE | End Close: ${current_30m_bucket['close']:.2f} | Total 30m Vol: {current_30m_vol:,.0f}"
+                )
 
     return on_bar_update
 
