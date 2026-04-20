@@ -19,7 +19,6 @@ def create_bar_handler(targets_dict: dict):
 
     def on_bar_update(bars, hasNewBar):
         """Callback function triggered when a new bar updates or closes."""
-        # ONLY run the heavy Pandas logic if a 5-minute candle has officially closed
         if hasNewBar:
             symbol = bars.contract.symbol
 
@@ -27,11 +26,18 @@ def create_bar_handler(targets_dict: dict):
             df = util.df(bars)
             df.set_index("date", inplace=True)
 
+            # NOTE: ib_insync includes the currently forming (live) candle at the end of the list.
+            # We drop the last row so we are only evaluating and resampling fully CLOSED candles.
+            closed_df = df.iloc[:-1]
+            
+            if closed_df.empty:
+                return
+
             # Get the time of the newly closed 5-minute bar
-            latest_time = df.index[-1].time()
+            latest_time = closed_df.index[-1].time()
             market_open_time = datetime.time(6, 30) # This assumes PST
 
-            # Resample to 30 minutes
+            # Resample strictly completed 5m bars to 30 minutes
             ohlcv_dict = {
                 "open": "first",
                 "high": "max",
@@ -39,11 +45,12 @@ def create_bar_handler(targets_dict: dict):
                 "close": "last",
                 "volume": "sum",
             }
-            df_30m = df.resample("30min").agg(ohlcv_dict).dropna()
+            df_30m = closed_df.resample("30min").agg(ohlcv_dict).dropna()
 
             if df_30m.empty:
                 return
 
+            # Because we stripped the live candle, iloc[-1] is now the fully completed 30m bucket
             latest_30m = df_30m.iloc[-1]
             latest_volume = latest_30m["volume"]
             latest_close = latest_30m["close"]
@@ -81,7 +88,7 @@ def create_bar_handler(targets_dict: dict):
 
                     gap_str = f" | Day Chg: {current_change_pct:+.2f}%"
 
-            # Standard Info logging for regular 5m closes (Clarified log message)
+            # Standard Info logging for regular 5m closes
             logger.info(
                 f"[{symbol}] 5m Closed (30m Bucket Update) | Close: ${latest_close:.2f}{gap_str} | Vol: {latest_volume:,.0f}"
             )
@@ -127,7 +134,7 @@ def subscribe_historical_bars(ib: IB, targets_dict: dict) -> dict:
         bars = ib.reqHistoricalData(
             contract,
             endDateTime="",
-            durationStr="1 D",  # FIX: Pull 1 day of history to prevent data starvation on the 30m volume
+            durationStr="1 D",  # Pull 1 day of history to prevent data starvation on the 30m volume
             barSizeSetting="5 mins",
             whatToShow="TRADES",
             useRTH=False,  # CRITICAL: False allows premarket/after-hours data
