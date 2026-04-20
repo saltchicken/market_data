@@ -147,7 +147,7 @@ def subscribe_historical_bars(ib: IB, targets_dict: dict) -> dict:
         bars = ib.reqHistoricalData(
             contract,
             endDateTime="",
-            durationStr="1 D",  # Pull 1 day of history to prevent data starvation on the 30m volume
+            durationStr="4 D",  # Pull 4 day of history to prevent data starvation on the 30m volume
             barSizeSetting="5 mins",
             whatToShow="TRADES",
             useRTH=False,  # CRITICAL: False allows premarket/after-hours data
