@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, text
 logger = logging.getLogger("ibkr_alerts")
 
 def get_watchlist_targets_from_db(db_url: str) -> dict:
-    """Fetch active watchlist tickers, their targets, AND yesterday's close from PostgreSQL."""
+    """Fetch watchlist tickers, their targets, AND yesterday's close from PostgreSQL."""
     if not db_url:
         logger.error("DB_URL is not set in the environment variables.")
         return {}
