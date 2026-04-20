@@ -45,7 +45,9 @@ def _get_valid_tickers(client):
         _VALID_TICKERS_CACHE["SPY"] = "ETF"
         _VALID_TICKERS_CACHE["QQQ"] = "ETF"
 
-        print(f"Found {len(_VALID_TICKERS_CACHE)} active CS and ADRC tickers (including SPY).")
+        print(
+            f"Found {len(_VALID_TICKERS_CACHE)} active CS and ADRC tickers (including SPY)."
+        )
     except Exception as e:
         print(f"Error fetching valid tickers list: {e}")
         raise e
@@ -77,7 +79,9 @@ def get_entire_market_ohlcv(date, client):
         data_dicts = [
             {
                 "ticker": getattr(agg, "ticker", None),
-                "asset_class": valid_tickers.get(getattr(agg, "ticker", None)), # Inject the asset class here
+                "asset_class": valid_tickers.get(
+                    getattr(agg, "ticker", None)
+                ),  # Inject the asset class here
                 "open": getattr(agg, "open", None),
                 "high": getattr(agg, "high", None),
                 "low": getattr(agg, "low", None),

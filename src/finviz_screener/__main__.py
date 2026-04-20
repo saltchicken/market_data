@@ -71,14 +71,18 @@ def clean_columns_for_db(df: pd.DataFrame) -> pd.DataFrame:
     def parse_suffix(val):
         if isinstance(val, str):
             val = val.strip()
-            if val and val[-1].upper() in ('T', 'B', 'M', 'K'):
+            if val and val[-1].upper() in ("T", "B", "M", "K"):
                 try:
                     num = float(val[:-1])
                     mult = val[-1].upper()
-                    if mult == 'T': return num * 1e12
-                    if mult == 'B': return num * 1e9
-                    if mult == 'M': return num * 1e6
-                    if mult == 'K': return num * 1e3
+                    if mult == "T":
+                        return num * 1e12
+                    if mult == "B":
+                        return num * 1e9
+                    if mult == "M":
+                        return num * 1e6
+                    if mult == "K":
+                        return num * 1e3
                 except ValueError:
                     pass
         return val
@@ -96,20 +100,39 @@ def clean_columns_for_db(df: pd.DataFrame) -> pd.DataFrame:
 
     # 2. Drop redundant columns that are locally calculated in the daily_indicators pipeline
     redundant_columns = [
-        "price", "change", "volume", "avg_volume", "rel_volume",
-        "perf_week", "perf_month", "perf_quart", "perf_half", 
-        "perf_ytd", "perf_year", "perf_3y", "perf_5y", "perf_10y",
-        "gap", "change_from_open",
-        "sma20", "sma50", "sma200", "rsi", "atr", 
-        "volatility_w", "volatility_m"
+        "price",
+        "change",
+        "volume",
+        "avg_volume",
+        "rel_volume",
+        "perf_week",
+        "perf_month",
+        "perf_quart",
+        "perf_half",
+        "perf_ytd",
+        "perf_year",
+        "perf_3y",
+        "perf_5y",
+        "perf_10y",
+        "gap",
+        "change_from_open",
+        "sma20",
+        "sma50",
+        "sma200",
+        "rsi",
+        "atr",
+        "volatility_w",
+        "volatility_m",
     ]
-    df_db = df_db.drop(columns=[col for col in redundant_columns if col in df_db.columns])
+    df_db = df_db.drop(
+        columns=[col for col in redundant_columns if col in df_db.columns]
+    )
 
     # 3. Clean Data Types Safely
     for col in df_db.columns:
-        if df_db[col].dtype == 'object': # If Pandas thinks it's text
+        if df_db[col].dtype == "object":  # If Pandas thinks it's text
             # Replace Finviz missing value indicator exactly with None
-            df_db[col] = df_db[col].replace('-', None)
+            df_db[col] = df_db[col].replace("-", None)
 
             original_valid = df_db[col].notna().sum()
             if original_valid == 0:
@@ -119,25 +142,25 @@ def clean_columns_for_db(df: pd.DataFrame) -> pd.DataFrame:
             df_db[col] = df_db[col].apply(parse_suffix)
 
             # Safely check and convert percentage columns without crashing on text
-            if df_db[col].astype(str).str.contains('%').any():
-                stripped_col = df_db[col].astype(str).str.replace('%', '', regex=False)
-                
+            if df_db[col].astype(str).str.contains("%").any():
+                stripped_col = df_db[col].astype(str).str.replace("%", "", regex=False)
+
                 # Coerce errors so unconvertible text becomes NaN instead of crashing
-                converted_col = pd.to_numeric(stripped_col, errors='coerce')
-                
+                converted_col = pd.to_numeric(stripped_col, errors="coerce")
+
                 # Only apply the conversion if it didn't wipe out > 50% of the column's valid data.
                 # (This protects text columns like 'Company' if a single company has a '%' in its name)
                 if converted_col.notna().sum() >= (original_valid * 0.5):
                     df_db[col] = converted_col
             else:
                 # Catch other numbers formatted as text (e.g., P/E ratio that was skipped due to '-')
-                converted_col = pd.to_numeric(df_db[col], errors='coerce')
-                
+                converted_col = pd.to_numeric(df_db[col], errors="coerce")
+
                 if converted_col.notna().sum() >= (original_valid * 0.5):
                     df_db[col] = converted_col
 
     # 5. Numeric Rounding
-    numeric_cols = df_db.select_dtypes(include=['number']).columns
+    numeric_cols = df_db.select_dtypes(include=["number"]).columns
     df_db[numeric_cols] = df_db[numeric_cols].round(2)
 
     return df_db
@@ -150,19 +173,18 @@ def upsert_finviz_data(df: pd.DataFrame, table_name: str, engine):
 
     # Replace NaN with None so SQLAlchemy inserts NULLs instead of crashing on 'NaN' floats
     clean_df = df.where(pd.notnull(df), None)
-    records = clean_df.to_dict(orient='records')
+    records = clean_df.to_dict(orient="records")
 
     metadata = MetaData()
     table = Table(table_name, metadata, autoload_with=engine)
 
     stmt = insert(table).values(records)
-    
+
     # Update all columns except the primary keys if a conflict occurs
-    update_dict = {c.name: c for c in stmt.excluded if c.name not in ['ticker', 'date']}
+    update_dict = {c.name: c for c in stmt.excluded if c.name not in ["ticker", "date"]}
 
     upsert_stmt = stmt.on_conflict_do_update(
-        index_elements=['ticker', 'date'],
-        set_=update_dict
+        index_elements=["ticker", "date"], set_=update_dict
     )
 
     with engine.begin() as conn:
@@ -172,6 +194,7 @@ def upsert_finviz_data(df: pd.DataFrame, table_name: str, engine):
 def init_database(db_url: str):
     """Executes the init_schema.sql file to initialize the database schema."""
     from sqlalchemy import create_engine, text
+
     sql_file_path = os.path.join(os.path.dirname(__file__), "sql", "init_schema.sql")
 
     if not os.path.exists(sql_file_path):
@@ -265,9 +288,7 @@ def main():
 
     # --- Add timestamp for historical tracking ---
     current_date = datetime.today().strftime("%Y-%m-%d")
-    df["Date"] = (
-        pd.Timestamp.today().date()
-    )
+    df["Date"] = pd.Timestamp.today().date()
 
     # Extract just the ticker symbols
     tickers = df["Ticker"].tolist()

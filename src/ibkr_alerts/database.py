@@ -3,6 +3,7 @@ from sqlalchemy import create_engine, text
 
 logger = logging.getLogger("ibkr_alerts")
 
+
 def get_watchlist_targets_from_db(db_url: str) -> dict:
     """Fetch watchlist tickers, their targets, AND yesterday's close from PostgreSQL."""
     if not db_url:
@@ -30,15 +31,15 @@ def get_watchlist_targets_from_db(db_url: str) -> dict:
                 LIMIT 50;
             """)
             result = conn.execute(query)
-            
+
             # Map results to a dictionary
             targets = {}
             for row in result:
                 targets[row[0]] = {
-                    'target_buy': row[1],
-                    'target_sell': row[2],
-                    'target_volume': row[3],
-                    'prev_close': row[4]  # Added yesterday's close
+                    "target_buy": row[1],
+                    "target_sell": row[2],
+                    "target_volume": row[3],
+                    "prev_close": row[4],  # Added yesterday's close
                 }
         return targets
     except Exception as e:
