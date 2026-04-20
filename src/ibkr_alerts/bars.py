@@ -29,7 +29,7 @@ def create_bar_handler(targets_dict: dict):
 
             # Get the time of the newly closed 5-minute bar
             latest_time = df.index[-1].time()
-            market_open_time = datetime.time(9, 30)
+            market_open_time = datetime.time(6, 30) # This assumes PST
 
             # Resample to 30 minutes
             ohlcv_dict = {
