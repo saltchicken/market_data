@@ -61,6 +61,10 @@ def main():
             now = datetime.datetime.now()
 
             if now.hour >= stop_hour and now.minute >= stop_minute:
+                ## NOTE: Just for debugging.
+                print(now)
+                print(now.hours)
+                print(now.minutes)
                 logger.info(f"⏰ Reached {stop_hour}:{stop_minute:02d}. Market is closed.")
                 break
 
