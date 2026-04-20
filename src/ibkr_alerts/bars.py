@@ -9,9 +9,12 @@ logger = logging.getLogger("ibkr_alerts")
 def create_bar_handler(targets_dict: dict):
     """Factory function to create a closure that holds the target dictionaries."""
     
-    # State trackers
+    # State trackers for debouncing alerts
     alerted_gaps = set()
     open_gap_logged = set()
+    alerted_volume = set()
+    alerted_buy = set()
+    alerted_sell = set()
     
     def on_bar_update(bars, hasNewBar):
         """Callback function triggered when a new bar updates or closes."""
@@ -72,18 +75,21 @@ def create_bar_handler(targets_dict: dict):
                     
                     gap_str = f" | Day Chg: {current_change_pct:+.2f}%"
 
-            # Standard Info logging for regular 30m closes
-            logger.info(f"[{symbol}] 30m Closed | Close: ${latest_close:.2f}{gap_str} | Vol: {latest_volume:,.0f}")
+            # Standard Info logging for regular 5m closes (Clarified log message)
+            logger.info(f"[{symbol}] 5m Closed (30m Bucket Update) | Close: ${latest_close:.2f}{gap_str} | Vol: {latest_volume:,.0f}")
 
-            # --- TARGET ALERTS ---
-            if t_vol and latest_volume >= t_vol:
+            # --- TARGET ALERTS (Debounced) ---
+            if t_vol and latest_volume >= t_vol and symbol not in alerted_volume:
                 trigger_alert("🚨 VOLUME SURGE", f"{symbol} volume ({latest_volume:,.0f}) exceeded target ({t_vol:,.0f})!")
+                alerted_volume.add(symbol) # Ensure we only alert once
                 
-            if t_buy and latest_close <= t_buy:
+            if t_buy and latest_close <= t_buy and symbol not in alerted_buy:
                 trigger_alert("💸 BUY TARGET REACHED", f"{symbol} dropped to ${latest_close:.2f} (Target: ${t_buy:.2f})!")
+                alerted_buy.add(symbol) # Ensure we only alert once
 
-            if t_sell and latest_close >= t_sell:
+            if t_sell and latest_close >= t_sell and symbol not in alerted_sell:
                 trigger_alert("💰 SELL TARGET REACHED", f"{symbol} climbed to ${latest_close:.2f} (Target: ${t_sell:.2f})!")
+                alerted_sell.add(symbol) # Ensure we only alert once
 
     return on_bar_update
 
@@ -103,7 +109,7 @@ def subscribe_historical_bars(ib: IB, targets_dict: dict) -> dict:
         bars = ib.reqHistoricalData(
             contract,
             endDateTime="",
-            durationStr="900 S",
+            durationStr="1 D", # FIX: Pull 1 day of history to prevent data starvation on the 30m volume
             barSizeSetting="5 mins",
             whatToShow="TRADES",
             useRTH=False,  # CRITICAL: False allows premarket/after-hours data
