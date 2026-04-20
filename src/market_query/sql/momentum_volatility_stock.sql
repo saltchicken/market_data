@@ -60,16 +60,7 @@ FROM basemetrics
 WHERE
   base_vol_score > 1.2  -- Minimum threshold: We want stocks with at least 20% above-average baseline volume
   AND atr_14_pct > 4.0      -- Minimum Volatility: We only care about stocks that actually move (4% is a healthy baseline)
-  AND close >= 5.0      -- Penny Stock Filter: Exclude anything trading under $5.00
+  -- Penny Stock Filter: Exclude anything trading under $5.00
+  AND close >= 5.0
 ORDER BY enhanced_attention_score DESC
 LIMIT 50;
-
-
-
-
-
-
-
-
-
-
