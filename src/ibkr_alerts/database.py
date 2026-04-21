@@ -5,7 +5,7 @@ logger = logging.getLogger("ibkr_alerts")
 
 
 def get_watchlist_targets_from_db(db_url: str) -> dict:
-    """Fetch watchlist tickers, their targets, AND yesterday's close from PostgreSQL."""
+    """Fetch watchlist tickers AND yesterday's close from PostgreSQL."""
     if not db_url:
         logger.error("DB_URL is not set in the environment variables.")
         return {}
@@ -13,13 +13,10 @@ def get_watchlist_targets_from_db(db_url: str) -> dict:
     try:
         engine = create_engine(db_url)
         with engine.connect() as conn:
-            # Join the watchlist with the most recent daily_indicators record to get 'prev_close'
+            # We now ONLY need the ticker and the prev_close 
             query = text("""
                 SELECT 
                     w.ticker, 
-                    w.target_buy, 
-                    w.target_sell, 
-                    w.target_volume,
                     i.close AS prev_close
                 FROM watchlist w
                 LEFT JOIN (
@@ -32,14 +29,11 @@ def get_watchlist_targets_from_db(db_url: str) -> dict:
             """)
             result = conn.execute(query)
 
-            # Map results to a dictionary
+            # Map results to a clean dictionary
             targets = {}
             for row in result:
                 targets[row[0]] = {
-                    "target_buy": row[1],
-                    "target_sell": row[2],
-                    "target_volume": row[3],
-                    "prev_close": row[4],  # Added yesterday's close
+                    "prev_close": row[1],
                 }
         return targets
     except Exception as e:
