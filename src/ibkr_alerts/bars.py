@@ -58,7 +58,7 @@ class LiveTradeBarBuilder:
             self.live_tickers[contract.symbol] = ticker
             
             logger.info(f"Subscribed to live tick stream for {contract.symbol}")
-            self.ib.sleep(0.1) # Tiny stagger to prevent overwhelming the socket initially
+            self.ib.sleep(1) # Tiny stagger to prevent overwhelming the socket initially
             
         return self.live_tickers
 
