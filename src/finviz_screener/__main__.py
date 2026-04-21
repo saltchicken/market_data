@@ -170,9 +170,11 @@ def upsert_finviz_data(df: pd.DataFrame, table_name: str, engine):
     """Upserts dataframe into PostgreSQL using ON CONFLICT DO UPDATE."""
     from sqlalchemy import MetaData, Table
     from sqlalchemy.dialects.postgresql import insert
+    import numpy as np
 
-    # Replace NaN with None so SQLAlchemy inserts NULLs instead of crashing on 'NaN' floats
-    clean_df = df.where(pd.notnull(df), None)
+    # Safely convert NaN to None across the entire dataframe by replacing it 
+    # and forcing the resulting columns to be python objects
+    clean_df = df.replace({np.nan: None})
     records = clean_df.to_dict(orient="records")
 
     metadata = MetaData()
