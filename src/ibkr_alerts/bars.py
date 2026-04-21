@@ -74,14 +74,14 @@ class LiveTradeBarBuilder:
         price = ticker.last
         cum_vol = ticker.volume
 
-        # Wait until IBKR sends valid volume data
+        # FIX: Avoid poisoning the baseline if IBKR sends NaN volume on the initial ticks
         if math.isnan(cum_vol):
-            cum_vol = 0
-
-        # Calculate the delta in cumulative volume since the last 250ms snapshot
-        prev_cum_vol = self.daily_cum_volume.get(symbol, cum_vol)
-        size = cum_vol - prev_cum_vol
-        self.daily_cum_volume[symbol] = cum_vol
+            size = 0
+        else:
+            # Calculate the delta in cumulative volume since the last 250ms snapshot
+            prev_cum_vol = self.daily_cum_volume.get(symbol, cum_vol)
+            size = cum_vol - prev_cum_vol
+            self.daily_cum_volume[symbol] = cum_vol
 
         # IBKR reports cumulative volume for US stocks in lots of 100. Multiply to get raw shares.
         shares_traded = int(size * 100)
@@ -237,7 +237,7 @@ class LiveTradeBarBuilder:
         )
 
 
-def subscribe_historical_bars(ib: IB, targets_dict: dict) -> dict:
+def subscribe_historical_bars(ib: IB, targets_dict: dict) -> LiveTradeBarBuilder:
     """
     Acts as a seamless drop-in replacement wrapper for the original __main__.py
     while actually instantiating the new Live Trade Tick builder.
@@ -245,5 +245,8 @@ def subscribe_historical_bars(ib: IB, targets_dict: dict) -> dict:
     logger.info("Initializing live tick-by-tick data streams...")
     builder = LiveTradeBarBuilder(ib, targets_dict)
 
-    # Return the dictionary of live tickers to keep the objects alive
-    return builder.start()
+    builder.start()
+
+    # FIX: Return the builder instance itself instead of the local dictionary so that
+    # the object survives garbage collection and the weak-referenced event loop stays alive.
+    return builder
