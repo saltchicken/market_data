@@ -47,17 +47,17 @@ def main():
     # Start the monitoring service
     monitor = monitor_market_open(ib, watch_targets)
 
-    logger.info("Listening for Market Open (06:30 PST) and building first 30m candles...")
-
-    # Stop tracking the 30m candle at 07:01 PST (allows final 06:59:59 ticks to process)
-    stop_time = datetime.time(7, 1)
+    logger.info("Listening for Market Open (06:30 PST) and building candles (5m, 15m, 30m)...")
 
     try:
         while True:
             now = datetime.datetime.now()
-            if now.time() >= stop_time:
-                logger.info(f"⏰ Reached {stop_time.strftime('%H:%M')}. Finalizing first 30m candles.")
-                monitor.finalize_candles()
+            # Feed current time to the monitor to check if a candle cutoff was reached
+            monitor.check_time_alerts(now.time())
+            
+            # If all 3 candles have been generated and alerted, we are done
+            if monitor.alerted_30m:
+                logger.info("⏰ All timeframes completed. Finalizing monitor.")
                 break
             
             # Briefly sleep the event loop
@@ -65,12 +65,14 @@ def main():
 
     except KeyboardInterrupt:
         logger.warning("🛑 Ctrl+C detected. Finalizing early...")
-        monitor.finalize_candles()
+        # Try to output whatever timeframes haven't fired yet
+        if not monitor.alerted_5m: monitor._alert_timeframe("5m")
+        elif not monitor.alerted_15m: monitor._alert_timeframe("15m")
+        elif not monitor.alerted_30m: monitor._alert_timeframe("30m")
     finally:
         if ib.isConnected():
             ib.disconnect()
             logger.info("🔌 Disconnected cleanly from IB Gateway. Goodbye!")
-
 
 if __name__ == "__main__":
     main()
