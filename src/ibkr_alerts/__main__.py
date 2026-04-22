@@ -5,16 +5,15 @@ import logging
 from dotenv import load_dotenv
 from ib_insync import IB
 
-from .log_config import setup_logging
+from core.log_config import setup_logging
 from .database import get_watchlist_targets_from_db
 from .bars import monitor_market_open
 
-# Initialize a module-level logger
 logger = logging.getLogger("ibkr_alerts")
 
 
 def main():
-    setup_logging()
+    setup_logging("ibkr_alerts")
     logger.info("Starting IBKR Market Open Monitor...")
 
     load_dotenv()
@@ -24,9 +23,7 @@ def main():
     watch_targets = get_watchlist_targets_from_db(db_url)
 
     if not watch_targets:
-        logger.error(
-            "Watchlist is empty or could not be loaded from the database. Exiting."
-        )
+        logger.error("Watchlist is empty or could not be loaded from the database. Exiting.")
         sys.exit(1)
 
     logger.info(f"Loaded {len(watch_targets)} active tickers from the database to monitor:")
@@ -52,20 +49,16 @@ def main():
     try:
         while True:
             now = datetime.datetime.now()
-            # Feed current time to the monitor to check if a candle cutoff was reached
             monitor.check_time_alerts(now.time())
             
-            # If all 3 candles have been generated and alerted, we are done
             if monitor.alerted_30m:
                 logger.info("⏰ All timeframes completed. Finalizing monitor.")
                 break
             
-            # Briefly sleep the event loop
             ib.sleep(5)
 
     except KeyboardInterrupt:
         logger.warning("🛑 Ctrl+C detected. Finalizing early...")
-        # Try to output whatever timeframes haven't fired yet
         if not monitor.alerted_5m: monitor._alert_timeframe("5m")
         elif not monitor.alerted_15m: monitor._alert_timeframe("15m")
         elif not monitor.alerted_30m: monitor._alert_timeframe("30m")

@@ -1,87 +1,61 @@
 import pandas as pd
 import time
+import logging
 from sqlalchemy import text
 from .database import upload_to_postgres
 
+logger = logging.getLogger(__name__)
 _VALID_TICKERS_CACHE = None
 
-
 def _get_valid_tickers(client):
-    """Fetches and caches the list of valid Common Stock and ADR tickers to avoid rate limits on repeated calls."""
+    """Fetches and caches the list of valid Common Stock and ADR tickers."""
     global _VALID_TICKERS_CACHE
     if _VALID_TICKERS_CACHE is not None:
         return _VALID_TICKERS_CACHE
 
-    print(
-        "\nFetching valid Common Stock (CS) and ADR (ADRC) tickers from Polygon (Throttled for API limits)..."
-    )
-    # Changed from a set() to a dict() so we can store the asset class type
+    logger.info("Fetching valid Common Stock (CS) and ADR (ADRC) tickers from Polygon...")
     _VALID_TICKERS_CACHE = {}
-
     ticker_types = ["CS", "ADRC"]
 
     try:
         for t_type in ticker_types:
-            print(f"  -> Fetching type: {t_type}")
-            # We explicitly ask for 1000 per page to minimize API calls.
-            ticker_iterator = client.list_tickers(
-                market="stocks", type=t_type, active=True, limit=1000
-            )
+            logger.info(f"Fetching type: {t_type}")
+            ticker_iterator = client.list_tickers(market="stocks", type=t_type, active=True, limit=1000)
 
             for i, t in enumerate(ticker_iterator):
                 if getattr(t, "ticker", None):
-                    # Map the ticker to its type
                     _VALID_TICKERS_CACHE[t.ticker] = t_type
-
-                # Sleep a tiny bit per ticker to guarantee ~15 seconds between API pagination calls
                 time.sleep(0.015)
 
                 if i > 0 and i % 1000 == 0:
-                    print(
-                        f"  ... fetched {len(_VALID_TICKERS_CACHE)} total tickers so far"
-                    )
+                    logger.info(f"... fetched {len(_VALID_TICKERS_CACHE)} total tickers so far")
 
-        # Explicitly add SPY (and any other specific ETFs) and tag them as "ETF"
         _VALID_TICKERS_CACHE["SPY"] = "ETF"
         _VALID_TICKERS_CACHE["QQQ"] = "ETF"
 
-        print(
-            f"Found {len(_VALID_TICKERS_CACHE)} active CS and ADRC tickers (including SPY)."
-        )
+        logger.info(f"Found {len(_VALID_TICKERS_CACHE)} active CS and ADRC tickers (including SPY).")
     except Exception as e:
-        print(f"Error fetching valid tickers list: {e}")
+        logger.error(f"Error fetching valid tickers list: {e}")
         raise e
 
     return _VALID_TICKERS_CACHE
 
 
 def get_entire_market_ohlcv(date, client):
-    """Fetches daily OHLCV for the entire US stock market for a specific date, filtering for valid tickers."""
-    # Get from cache instantly, or fetch it if this is the first run
+    """Fetches daily OHLCV for the entire US stock market for a specific date."""
     valid_tickers = _get_valid_tickers(client)
 
     try:
         all_market_data = client.get_grouped_daily_aggs(date)
-        if not all_market_data:
-            return None
+        if not all_market_data: return None
 
-        # Instantly filter out warrants, units, preferred stocks using our pre-fetched set
-        filtered_data = [
-            agg
-            for agg in all_market_data
-            if getattr(agg, "ticker", None) in valid_tickers
-        ]
-
-        print(
-            f"--- Successfully pulled {len(filtered_data)} valid CS/ADRC/ETF tickers for {date} (out of {len(all_market_data)} total) ---"
-        )
+        filtered_data = [agg for agg in all_market_data if getattr(agg, "ticker", None) in valid_tickers]
+        logger.info(f"Successfully pulled {len(filtered_data)} valid CS/ADRC/ETF tickers for {date} (out of {len(all_market_data)} total)")
 
         data_dicts = [
             {
                 "ticker": getattr(agg, "ticker", None),
-                "asset_class": valid_tickers.get(
-                    getattr(agg, "ticker", None)
-                ),  # Inject the asset class here
+                "asset_class": valid_tickers.get(getattr(agg, "ticker", None)),
                 "open": getattr(agg, "open", None),
                 "high": getattr(agg, "high", None),
                 "low": getattr(agg, "low", None),
@@ -100,7 +74,7 @@ def get_entire_market_ohlcv(date, client):
         return df
 
     except Exception as e:
-        print(f"Client Error: {e}")
+        logger.error(f"Client Error: {e}")
         return None
 
 
@@ -110,15 +84,11 @@ def fetch_and_upload(target_date, engine, client):
     if entire_market_data is not None and not entire_market_data.empty:
         entire_market_data["market_date"] = pd.to_datetime(target_date).date()
 
-        # Clean up data: drop invalid rows and remove duplicate tickers
-        # (Polygon sometimes returns multiple entries for the same ticker, which crashes COPY)
         entire_market_data = entire_market_data.dropna(subset=["ticker"])
         entire_market_data = entire_market_data.sort_values(
             "volume", ascending=False
         ).drop_duplicates(subset=["ticker"])
 
-        # Ensure idempotency: Delete existing data for this date so re-runs don't fail
-        # due to UniqueViolation constraints.
         try:
             with engine.begin() as conn:
                 conn.execute(
@@ -126,12 +96,10 @@ def fetch_and_upload(target_date, engine, client):
                     {"dt": target_date},
                 )
         except Exception as e:
-            print(f"Warning: Could not clear existing data for {target_date}: {e}")
+            logger.warning(f"Could not clear existing data for {target_date}: {e}")
 
-        upload_to_postgres(
-            df=entire_market_data, table_name="daily_market_data", engine=engine
-        )
+        upload_to_postgres(df=entire_market_data, table_name="daily_market_data", engine=engine)
         return True
     else:
-        print(f"No market data found for {target_date}.")
+        logger.warning(f"No market data found for {target_date}.")
         return False

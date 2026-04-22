@@ -1,15 +1,17 @@
 import os
 import io
+import logging
 from tqdm import tqdm
 from sqlalchemy import create_engine, text
 
+logger = logging.getLogger(__name__)
 
 def init_database(db_url):
     """Executes a SQL file to initialize the database schema."""
     sql_file_path = os.path.join(os.path.dirname(__file__), "sql", "init_schema.sql")
 
     if not os.path.exists(sql_file_path):
-        print(f"Error: SQL file not found at {sql_file_path}")
+        logger.error(f"SQL file not found at {sql_file_path}")
         return
 
     try:
@@ -18,16 +20,13 @@ def init_database(db_url):
             with open(sql_file_path, "r") as file:
                 sql_script = file.read()
                 conn.execute(text(sql_script))
-        print(f"Successfully initialized database schema.")
+        logger.info("Successfully initialized database schema.")
     except Exception as e:
-        print(f"Database Initialization Error: {e}")
+        logger.error(f"Database Initialization Error: {e}")
 
 
 def copy_to_sql_with_progress(df, table_name, engine, chunksize=100000):
-    """
-    Uses PostgreSQL's native COPY command which is 10-100x faster than standard pandas to_sql.
-    Includes a tqdm progress bar for monitoring.
-    """
+    """Uses PostgreSQL's native COPY command which is 10-100x faster than standard pandas to_sql."""
     raw_conn = engine.raw_connection()
     try:
         cursor = raw_conn.cursor()
@@ -35,7 +34,6 @@ def copy_to_sql_with_progress(df, table_name, engine, chunksize=100000):
             for i in range(0, len(df), chunksize):
                 chunk = df.iloc[i : i + chunksize]
                 buffer = io.StringIO()
-                # Use \N for nulls so Postgres COPY interprets them correctly
                 chunk.to_csv(buffer, index=False, header=False, na_rep="\\N")
                 buffer.seek(0)
 
@@ -60,6 +58,6 @@ def upload_to_postgres(df, table_name, engine):
         copy_to_sql_with_progress(df, table_name, engine, chunksize=100000)
     except Exception as e:
         if "UniqueViolation" in str(e) or "duplicate key" in str(e):
-            print("Upload Skipped: Data for this date already exists.")
+            logger.info("Upload Skipped: Data for this date already exists.")
         else:
-            print(f"Database Upload Error: {str(e)[:200]}")
+            logger.error(f"Database Upload Error: {str(e)[:200]}")
