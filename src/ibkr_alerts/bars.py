@@ -9,8 +9,9 @@ logger = logging.getLogger("ibkr_alerts")
 
 class MarketOpenMonitor:
     """
-    Subscribes to raw Tick-by-Tick trade data specifically targeting the 
+    Subscribes to live trade (250ms snapshots) data specifically targeting the 
     opening print (for gaps) and aggregating the first 5m, 15m, and 30m candles.
+    Note that volume is not perfectly accurate due to dropping opening print volume and odd-lot truncation.
     """
 
     def __init__(self, ib: IB, targets_dict: dict):
