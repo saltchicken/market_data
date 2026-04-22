@@ -2,7 +2,6 @@ import logging
 import datetime
 import math
 from ib_insync import IB, Stock, Ticker
-from .alerts import trigger_alert
 
 logger = logging.getLogger("ibkr_alerts")
 
@@ -103,10 +102,6 @@ class MarketOpenMonitor:
                 gap_str = f"{gap_pct:+.2f}%"
 
             logger.info(f"🔔 OPEN [{symbol}]: ${price:.2f} | Gap: {gap_str} | Prev Close: ${prev_close}")
-            trigger_alert(
-                "MARKET OPEN GAP", 
-                f"{symbol} opened at ${price:.2f} (Gap: {gap_str})"
-            )
 
             # Initialize the candles state for all 3 timeframes
             self.bars[symbol] = {
@@ -171,7 +166,7 @@ class MarketOpenMonitor:
                 f"Vol: {bar['volume']:,}"
             )
             logger.info(summary)
-            trigger_alert(f"{tf} CANDLE CLOSED", summary)
+
 
 def monitor_market_open(ib: IB, targets_dict: dict) -> MarketOpenMonitor:
     """Initializes and returns the live monitor."""
