@@ -167,7 +167,7 @@ class MarketOpenMonitor:
                 f"[{symbol}] {tf} | "
                 f"O: ${data['open']:.2f} H: ${bar['high']:.2f} "
                 f"L: ${bar['low']:.2f} C: ${bar['close']:.2f} | "
-                f"Vol: {bar['volume']:,} | Gap: {data['gap_pct']:+.2f}%"
+                f"Vol: {bar['volume']:,}"
             )
             logger.info(summary)
             trigger_alert(f"{tf} CANDLE CLOSED", summary)
