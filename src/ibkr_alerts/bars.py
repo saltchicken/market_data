@@ -128,6 +128,19 @@ class MarketOpenMonitor:
                 f"[{symbol}] {tf} | O: ${data['open']:.2f} H: ${bar['high']:.2f} "
                 f"L: ${bar['low']:.2f} C: ${bar['close']:.2f} | Vol: {bar['volume']:,}"
             )
+            
+            # --- NEW FEATURE: 30m ATR Alert Check ---
+            if tf == "30m":
+                atr_14 = self.targets_dict.get(symbol, {}).get("atr_14")
+                if atr_14 and atr_14 > 0:
+                    candle_range = bar['high'] - bar['low']
+                    target_threshold = atr_14 * 0.25
+                    
+                    if candle_range > target_threshold:
+                        logger.warning(
+                            f"🚨 VOLATILITY ALERT: [{symbol}] 30m candle range (${candle_range:.2f}) "
+                            f"exceeded 25% of Daily ATR (${target_threshold:.2f})!"
+                        )
 
 
 def monitor_market_open(ib: IB, targets_dict: dict) -> MarketOpenMonitor:
