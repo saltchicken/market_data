@@ -3,13 +3,13 @@
 # ====================================================================
 
 # 1. Run Finviz Screener Mon-Fri at 18:00 (6:00 PM)
-0 18 * * 1-5 cd ~/market_data && .venv/bin/finviz_screener >> logs_cron.log 2>&1
+0 18 * * 1-5 cd ~/market_data && .venv/bin/finviz_screener > /dev/null 2>> cron_errors.log
 
 # 2. Run Daily Market Data fetch & indicators Mon-Fri at 21:00 (9:00 PM)
-0 21 * * 1-5 cd ~/market_data && .venv/bin/market_data >> logs_cron.log 2>&1
+0 21 * * 1-5 cd ~/market_data && .venv/bin/market_data > /dev/null 2>> cron_errors.log
 
 # 3 Run market query to update the watchlist Mon-Fri at 22:30 (10:30 PM)
-30 22 * * 1-5 cd ~/market_data && .venv/bin/market_query highest_volatility -w >> logs_cron.log 2>&1
+30 22 * * 1-5 cd ~/market_data && .venv/bin/market_query highest_volatility -w > /dev/null 2>> cron_errors.log
 
 # 4. Start IBKR Alerts premarket Mon-Fri at 06:25 AM
-25 6 * * 1-5 cd ~/market_data && .venv/bin/ibkr_alerts >> logs_cron.log 2>&1
+25 6 * * 1-5 cd ~/market_data && .venv/bin/ibkr_alerts > /dev/null 2>> cron_errors.log
