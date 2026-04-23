@@ -2,10 +2,11 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 
+
 # TODO: Remove the need for app_name parameter
 def setup_logging(app_name: str = None, log_level=logging.INFO):
     """Configures centralized root logging to console and a single unified rotating file."""
-    
+
     # Target the root logger so all modules inherit these settings
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
@@ -16,8 +17,8 @@ def setup_logging(app_name: str = None, log_level=logging.INFO):
 
     # Formatter for the logs (%(name)-20s already captures the module name!)
     formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s", 
-        datefmt="%Y-%m-%d %H:%M:%S"
+        "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     # 1. Console Handler
@@ -38,5 +39,5 @@ def setup_logging(app_name: str = None, log_level=logging.INFO):
     # Silence overly verbose external library logs
     logging.getLogger("ib_insync").setLevel(logging.ERROR)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
-    
+
     return root_logger

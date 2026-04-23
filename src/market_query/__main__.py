@@ -10,17 +10,32 @@ from core.log_config import setup_logging
 
 logger = logging.getLogger("market_query")
 
+
 def main():
     setup_logging("market_query")
 
     parser = argparse.ArgumentParser(
         description="Run analytical SQL queries against the database and optionally build a watchlist."
     )
-    parser.add_argument("query_name", nargs="?", help="Name of the query to run (e.g., golden_cross) or 'list'")
-    parser.add_argument("--ticker", "-t", type=str, help="Specific ticker to filter by", default=None)
-    parser.add_argument("--watchlist", "-w", action="store_true", help="Push tickers to watchlist")
-    parser.add_argument("--clear-all", action="store_true", help="Delete ALL tickers in the entire watchlist.")
-    parser.add_argument("--limit", type=int, default=20, help="Max tickers to add to watchlist")
+    parser.add_argument(
+        "query_name",
+        nargs="?",
+        help="Name of the query to run (e.g., golden_cross) or 'list'",
+    )
+    parser.add_argument(
+        "--ticker", "-t", type=str, help="Specific ticker to filter by", default=None
+    )
+    parser.add_argument(
+        "--watchlist", "-w", action="store_true", help="Push tickers to watchlist"
+    )
+    parser.add_argument(
+        "--clear-all",
+        action="store_true",
+        help="Delete ALL tickers in the entire watchlist.",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=20, help="Max tickers to add to watchlist"
+    )
 
     args = parser.parse_args()
 
@@ -61,7 +76,9 @@ def main():
                 print(f"  - {script.replace('.sql', '')}")
         else:
             print("  (No sql directory found)")
-        print("\nUsage: market_query <name> [--ticker TICKER] [--watchlist] [--clear-all] [--limit LIMIT]")
+        print(
+            "\nUsage: market_query <name> [--ticker TICKER] [--watchlist] [--clear-all] [--limit LIMIT]"
+        )
         sys.exit(0)
 
     query_name = args.query_name
@@ -73,7 +90,9 @@ def main():
     elif os.path.exists(query_name):
         sql_path = query_name
     else:
-        logger.error(f"Could not find query '{query_name}'. Run 'market_query list' to see available options.")
+        logger.error(
+            f"Could not find query '{query_name}'. Run 'market_query list' to see available options."
+        )
         sys.exit(1)
 
     with open(sql_path, "r") as file:
@@ -93,34 +112,51 @@ def main():
 
         if args.watchlist:
             if "ticker" not in df.columns:
-                logger.error("No 'ticker' column found in query results. Watchlist remains unchanged.")
+                logger.error(
+                    "No 'ticker' column found in query results. Watchlist remains unchanged."
+                )
                 sys.exit(1)
 
             df_to_add = df.head(args.limit)
             tickers_to_add = df_to_add["ticker"].tolist()
 
-            logger.info(f"✅ Strategy found {len(df)} tickers. Taking top {len(tickers_to_add)}...")
+            logger.info(
+                f"✅ Strategy found {len(df)} tickers. Taking top {len(tickers_to_add)}..."
+            )
 
             strategy_name = os.path.basename(sql_path).replace(".sql", "")
             allowed_optional_cols = ["target_buy", "target_sell", "target_volume"]
-            active_optional_cols = [col for col in allowed_optional_cols if col in df_to_add.columns]
+            active_optional_cols = [
+                col for col in allowed_optional_cols if col in df_to_add.columns
+            ]
 
             with engine.begin() as conn:
                 if not args.clear_all:
-                    logger.info(f"🧹 Automatically deleting old tickers for strategy: '{strategy_name}'...")
+                    logger.info(
+                        f"🧹 Automatically deleting old tickers for strategy: '{strategy_name}'..."
+                    )
                     conn.execute(
                         text("DELETE FROM watchlist WHERE strategy = :strat"),
                         {"strat": strategy_name},
                     )
 
-                logger.info(f"📝 Upserting tickers into watchlist tagged as '{strategy_name}'...")
+                logger.info(
+                    f"📝 Upserting tickers into watchlist tagged as '{strategy_name}'..."
+                )
                 if active_optional_cols:
-                    logger.info(f"   -> Including dynamic targets: {', '.join(active_optional_cols)}")
+                    logger.info(
+                        f"   -> Including dynamic targets: {', '.join(active_optional_cols)}"
+                    )
 
                 insert_cols = ["ticker", "strategy"] + active_optional_cols
-                insert_vals = [":ticker", ":strategy"] + [f":{col}" for col in active_optional_cols]
+                insert_vals = [":ticker", ":strategy"] + [
+                    f":{col}" for col in active_optional_cols
+                ]
 
-                update_clauses = ["strategy = EXCLUDED.strategy", "updated_at = CURRENT_TIMESTAMP"]
+                update_clauses = [
+                    "strategy = EXCLUDED.strategy",
+                    "updated_at = CURRENT_TIMESTAMP",
+                ]
                 for col in active_optional_cols:
                     update_clauses.append(f"{col} = EXCLUDED.{col}")
 
@@ -143,19 +179,24 @@ def main():
             logger.info(", ".join(tickers_to_add))
 
         else:
-            # We explicitly leave standard printing here to render the dataframe interactively for the user 
+            # We explicitly leave standard printing here to render the dataframe interactively for the user
             pd.set_option("display.max_rows", None)
             pd.set_option("display.max_columns", None)
             pd.set_option("display.width", 1000)
             print(df)
 
             if args.clear_all:
-                print("\n⚠️  Note: The watchlist in the database was cleared, but the results above were NOT saved to it.")
-                print("    Run the command again with the '--watchlist' (-w) flag if you meant to save them.")
+                print(
+                    "\n⚠️  Note: The watchlist in the database was cleared, but the results above were NOT saved to it."
+                )
+                print(
+                    "    Run the command again with the '--watchlist' (-w) flag if you meant to save them."
+                )
 
     except Exception as e:
         logger.error(f"An error occurred while running the query:\n{e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

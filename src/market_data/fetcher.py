@@ -7,20 +7,25 @@ from .database import upload_to_postgres
 logger = logging.getLogger(__name__)
 _VALID_TICKERS_CACHE = None
 
+
 def _get_valid_tickers(client):
     """Fetches and caches the list of valid Common Stock and ADR tickers."""
     global _VALID_TICKERS_CACHE
     if _VALID_TICKERS_CACHE is not None:
         return _VALID_TICKERS_CACHE
 
-    logger.info("Fetching valid Common Stock (CS) and ADR (ADRC) tickers from Polygon...")
+    logger.info(
+        "Fetching valid Common Stock (CS) and ADR (ADRC) tickers from Polygon..."
+    )
     _VALID_TICKERS_CACHE = {}
     ticker_types = ["CS", "ADRC"]
 
     try:
         for t_type in ticker_types:
             logger.info(f"Fetching type: {t_type}")
-            ticker_iterator = client.list_tickers(market="stocks", type=t_type, active=True, limit=1000)
+            ticker_iterator = client.list_tickers(
+                market="stocks", type=t_type, active=True, limit=1000
+            )
 
             for i, t in enumerate(ticker_iterator):
                 if getattr(t, "ticker", None):
@@ -28,12 +33,16 @@ def _get_valid_tickers(client):
                 time.sleep(0.015)
 
                 if i > 0 and i % 1000 == 0:
-                    logger.info(f"... fetched {len(_VALID_TICKERS_CACHE)} total tickers so far")
+                    logger.info(
+                        f"... fetched {len(_VALID_TICKERS_CACHE)} total tickers so far"
+                    )
 
         _VALID_TICKERS_CACHE["SPY"] = "ETF"
         _VALID_TICKERS_CACHE["QQQ"] = "ETF"
 
-        logger.info(f"Found {len(_VALID_TICKERS_CACHE)} active CS and ADRC tickers (including SPY).")
+        logger.info(
+            f"Found {len(_VALID_TICKERS_CACHE)} active CS and ADRC tickers (including SPY)."
+        )
     except Exception as e:
         logger.error(f"Error fetching valid tickers list: {e}")
         raise e
@@ -47,10 +56,17 @@ def get_entire_market_ohlcv(date, client):
 
     try:
         all_market_data = client.get_grouped_daily_aggs(date)
-        if not all_market_data: return None
+        if not all_market_data:
+            return None
 
-        filtered_data = [agg for agg in all_market_data if getattr(agg, "ticker", None) in valid_tickers]
-        logger.info(f"Successfully pulled {len(filtered_data)} valid CS/ADRC/ETF tickers for {date} (out of {len(all_market_data)} total)")
+        filtered_data = [
+            agg
+            for agg in all_market_data
+            if getattr(agg, "ticker", None) in valid_tickers
+        ]
+        logger.info(
+            f"Successfully pulled {len(filtered_data)} valid CS/ADRC/ETF tickers for {date} (out of {len(all_market_data)} total)"
+        )
 
         data_dicts = [
             {
@@ -98,7 +114,9 @@ def fetch_and_upload(target_date, engine, client):
         except Exception as e:
             logger.warning(f"Could not clear existing data for {target_date}: {e}")
 
-        upload_to_postgres(df=entire_market_data, table_name="daily_market_data", engine=engine)
+        upload_to_postgres(
+            df=entire_market_data, table_name="daily_market_data", engine=engine
+        )
         return True
     else:
         logger.warning(f"No market data found for {target_date}.")

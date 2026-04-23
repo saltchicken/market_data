@@ -13,15 +13,27 @@ logger = logging.getLogger("visualizer")
 try:
     import plotly.graph_objects as go
 except ImportError:
-    print("Plotly is required for visualization. Please install it using: pip install plotly")
+    print(
+        "Plotly is required for visualization. Please install it using: pip install plotly"
+    )
     sys.exit(1)
 
 
 def main():
     setup_logging("visualizer")
-    parser = argparse.ArgumentParser(description="Visualize Support & Resistance Levels on a Candlestick Chart.")
-    parser.add_argument("--ticker", "-t", type=str, required=True, help="Specific ticker to visualize")
-    parser.add_argument("--sql_file", "-s", type=str, default="sql/horizontal_levels.sql", help="Path to SQL file")
+    parser = argparse.ArgumentParser(
+        description="Visualize Support & Resistance Levels on a Candlestick Chart."
+    )
+    parser.add_argument(
+        "--ticker", "-t", type=str, required=True, help="Specific ticker to visualize"
+    )
+    parser.add_argument(
+        "--sql_file",
+        "-s",
+        type=str,
+        default="sql/horizontal_levels.sql",
+        help="Path to SQL file",
+    )
     args = parser.parse_args()
 
     ticker = args.ticker.upper()
@@ -77,8 +89,12 @@ def main():
     fig = go.Figure(
         data=[
             go.Candlestick(
-                x=ohlc_df["market_date"], open=ohlc_df["open"], high=ohlc_df["high"], 
-                low=ohlc_df["low"], close=ohlc_df["close"], name="Price Action"
+                x=ohlc_df["market_date"],
+                open=ohlc_df["open"],
+                high=ohlc_df["high"],
+                low=ohlc_df["low"],
+                close=ohlc_df["close"],
+                name="Price Action",
             )
         ]
     )
@@ -90,27 +106,39 @@ def main():
         line_color = "rgba(255, 0, 0, 0.7)" if is_resistance else "rgba(0, 255, 0, 0.7)"
 
         fig.add_shape(
-            type="line", x0=row["market_date"], y0=row["price_level"],
-            x1=latest_date, y1=row["price_level"],
+            type="line",
+            x0=row["market_date"],
+            y0=row["price_level"],
+            x1=latest_date,
+            y1=row["price_level"],
             line=dict(color=line_color, width=2, dash="dash"),
         )
 
         fig.add_annotation(
-            x=row["market_date"], y=row["price_level"],
+            x=row["market_date"],
+            y=row["price_level"],
             text=f"{row['level_type']} (${row['price_level']})",
-            showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=line_color,
-            ax=0, ay=(-20 if is_resistance else 20),
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1,
+            arrowwidth=2,
+            arrowcolor=line_color,
+            ax=0,
+            ay=(-20 if is_resistance else 20),
             font=dict(color=line_color, size=11),
         )
 
     fig.update_layout(
         title=f"{ticker} - 2-Month Support & Resistance Levels",
-        yaxis_title="Price ($)", xaxis_title="Date",
-        xaxis_rangeslider_visible=False, template="plotly_dark",
+        yaxis_title="Price ($)",
+        xaxis_title="Date",
+        xaxis_rangeslider_visible=False,
+        template="plotly_dark",
         margin=dict(l=50, r=50, t=50, b=50),
     )
 
     fig.show()
+
 
 if __name__ == "__main__":
     main()

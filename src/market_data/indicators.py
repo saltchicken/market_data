@@ -6,6 +6,7 @@ from .database import copy_to_sql_with_progress
 
 logger = logging.getLogger(__name__)
 
+
 def run_python_indicator_pipeline(engine, target_date=None):
     if target_date:
         logger.info(f"[INDICATORS] Calculating for {target_date} using Pandas...")
@@ -18,7 +19,9 @@ def run_python_indicator_pipeline(engine, target_date=None):
         df = pd.read_sql(query, engine, params={"dt": target_date})
     else:
         logger.info("[INDICATORS] Bulk calculating entire database using Pandas...")
-        query = text("SELECT ticker, market_date, open, high, low, close, volume FROM daily_market_data")
+        query = text(
+            "SELECT ticker, market_date, open, high, low, close, volume FROM daily_market_data"
+        )
         df = pd.read_sql(query, engine)
 
     if df.empty:
@@ -30,9 +33,17 @@ def run_python_indicator_pipeline(engine, target_date=None):
 
     # --- 1. True Range & Gap Calculation ---
     df["prev_close"] = grouped_ticker["close"].shift(1)
-    df["gap_pct"] = (((df["open"] - df["prev_close"]) / df["prev_close"].replace(0, float("nan"))) * 100).round(4)
-    df["price_change_dod_pct"] = (((df["close"] - df["prev_close"]) / df["prev_close"].replace(0, float("nan"))) * 100).round(4)
-    df["open_to_close_pct"] = (((df["close"] - df["open"]) / df["open"].replace(0, float("nan"))) * 100).round(4)
+    df["gap_pct"] = (
+        ((df["open"] - df["prev_close"]) / df["prev_close"].replace(0, float("nan")))
+        * 100
+    ).round(4)
+    df["price_change_dod_pct"] = (
+        ((df["close"] - df["prev_close"]) / df["prev_close"].replace(0, float("nan")))
+        * 100
+    ).round(4)
+    df["open_to_close_pct"] = (
+        ((df["close"] - df["open"]) / df["open"].replace(0, float("nan"))) * 100
+    ).round(4)
 
     df["tr0"] = df["high"] - df["low"]
     df["tr1"] = (df["high"] - df["prev_close"]).abs()
@@ -44,45 +55,146 @@ def run_python_indicator_pipeline(engine, target_date=None):
     grouped_vol = df.groupby("ticker")["volume"]
     grouped_close = df.groupby("ticker")["close"]
 
-    df["atr_14"] = grouped_tr.ewm(alpha=1/14, min_periods=14, adjust=False).mean().reset_index(level=0, drop=True).round(4)
-    df["atr_14_pct"] = ((df["atr_14"] / df["close"].replace(0, float("nan"))) * 100).round(4)
-    df["atr_5"] = grouped_tr.ewm(alpha=1/5, min_periods=5, adjust=False).mean().reset_index(level=0, drop=True).round(4)
-    df["atr_21"] = grouped_tr.ewm(alpha=1/21, min_periods=21, adjust=False).mean().reset_index(level=0, drop=True).round(4)
-    df["atr_5_21_dist_pct"] = (((df["atr_5"] - df["atr_21"]) / df["atr_21"].replace(0, float("nan"))) * 100).round(2)
+    df["atr_14"] = (
+        grouped_tr.ewm(alpha=1 / 14, min_periods=14, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
+    df["atr_14_pct"] = (
+        (df["atr_14"] / df["close"].replace(0, float("nan"))) * 100
+    ).round(4)
+    df["atr_5"] = (
+        grouped_tr.ewm(alpha=1 / 5, min_periods=5, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
+    df["atr_21"] = (
+        grouped_tr.ewm(alpha=1 / 21, min_periods=21, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
+    df["atr_5_21_dist_pct"] = (
+        ((df["atr_5"] - df["atr_21"]) / df["atr_21"].replace(0, float("nan"))) * 100
+    ).round(2)
 
-    df["sma_21"] = grouped_close.rolling(21, min_periods=21).mean().reset_index(level=0, drop=True).round(4)
-    df["sma_21_dist_pct"] = (((df["close"] - df["sma_21"]) / df["sma_21"].replace(0, float("nan"))) * 100).round(2)
-    df["sma_50"] = grouped_close.rolling(50, min_periods=50).mean().reset_index(level=0, drop=True).round(4)
-    df["sma_50_dist_pct"] = (((df["close"] - df["sma_50"]) / df["sma_50"].replace(0, float("nan"))) * 100).round(2)
-    df["sma_200"] = grouped_close.rolling(200, min_periods=200).mean().reset_index(level=0, drop=True).round(4)
-    df["sma_200_dist_pct"] = (((df["close"] - df["sma_200"]) / df["sma_200"].replace(0, float("nan"))) * 100).round(2)
+    df["sma_21"] = (
+        grouped_close.rolling(21, min_periods=21)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
+    df["sma_21_dist_pct"] = (
+        ((df["close"] - df["sma_21"]) / df["sma_21"].replace(0, float("nan"))) * 100
+    ).round(2)
+    df["sma_50"] = (
+        grouped_close.rolling(50, min_periods=50)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
+    df["sma_50_dist_pct"] = (
+        ((df["close"] - df["sma_50"]) / df["sma_50"].replace(0, float("nan"))) * 100
+    ).round(2)
+    df["sma_200"] = (
+        grouped_close.rolling(200, min_periods=200)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
+    df["sma_200_dist_pct"] = (
+        ((df["close"] - df["sma_200"]) / df["sma_200"].replace(0, float("nan"))) * 100
+    ).round(2)
 
-    df["ema_9"] = grouped_close.ewm(span=9, adjust=False).mean().reset_index(level=0, drop=True).round(4)
-    df["ema_21"] = grouped_close.ewm(span=21, adjust=False).mean().reset_index(level=0, drop=True).round(4)
-    df["ema_9_21_dist_pct"] = (((df["ema_9"] - df["ema_21"]) / df["ema_21"].replace(0, float("nan"))) * 100).round(2)
+    df["ema_9"] = (
+        grouped_close.ewm(span=9, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
+    df["ema_21"] = (
+        grouped_close.ewm(span=21, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
+    df["ema_9_21_dist_pct"] = (
+        ((df["ema_9"] - df["ema_21"]) / df["ema_21"].replace(0, float("nan"))) * 100
+    ).round(2)
 
-    ema_12 = grouped_close.ewm(span=12, adjust=False).mean().reset_index(level=0, drop=True)
-    ema_26 = grouped_close.ewm(span=26, adjust=False).mean().reset_index(level=0, drop=True)
+    ema_12 = (
+        grouped_close.ewm(span=12, adjust=False).mean().reset_index(level=0, drop=True)
+    )
+    ema_26 = (
+        grouped_close.ewm(span=26, adjust=False).mean().reset_index(level=0, drop=True)
+    )
     df["macd"] = (ema_12 - ema_26).round(4)
-    df["macd_signal"] = df.groupby("ticker")["macd"].ewm(span=9, adjust=False).mean().reset_index(level=0, drop=True).round(4)
+    df["macd_signal"] = (
+        df.groupby("ticker")["macd"]
+        .ewm(span=9, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
     df["macd_hist"] = (df["macd"] - df["macd_signal"]).round(4)
 
-    sma_20 = grouped_close.rolling(20, min_periods=20).mean().reset_index(level=0, drop=True)
-    std_20 = grouped_close.rolling(20, min_periods=20).std().reset_index(level=0, drop=True)
+    sma_20 = (
+        grouped_close.rolling(20, min_periods=20).mean().reset_index(level=0, drop=True)
+    )
+    std_20 = (
+        grouped_close.rolling(20, min_periods=20).std().reset_index(level=0, drop=True)
+    )
     df["bb_mid"] = sma_20.round(4)
     df["bb_upper"] = (sma_20 + (2 * std_20)).round(4)
     df["bb_lower"] = (sma_20 - (2 * std_20)).round(4)
 
-    atr_10 = grouped_tr.ewm(alpha=1/10, min_periods=10, adjust=False).mean().reset_index(level=0, drop=True)
-    df["kc_mid"] = grouped_close.ewm(span=20, adjust=False).mean().reset_index(level=0, drop=True).round(4)
+    atr_10 = (
+        grouped_tr.ewm(alpha=1 / 10, min_periods=10, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+    )
+    df["kc_mid"] = (
+        grouped_close.ewm(span=20, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(4)
+    )
     df["kc_upper"] = (df["kc_mid"] + (2 * atr_10)).round(4)
     df["kc_lower"] = (df["kc_mid"] - (2 * atr_10)).round(4)
 
-    df["vol_ema_5"] = grouped_vol.ewm(span=5, adjust=False).mean().reset_index(level=0, drop=True).round(2)
-    df["vol_sma_10"] = grouped_vol.rolling(10, min_periods=10).mean().reset_index(level=0, drop=True).round(2)
-    df["vol_ema_21"] = grouped_vol.ewm(span=21, adjust=False).mean().reset_index(level=0, drop=True).round(2)
-    df["vol_sma_60"] = grouped_vol.rolling(60, min_periods=60).mean().reset_index(level=0, drop=True).round(2)
-    df["vol_5_21_dist_pct"] = (((df["vol_ema_5"] - df["vol_ema_21"]) / df["vol_ema_21"].replace(0, float("nan"))) * 100).round(2)
+    df["vol_ema_5"] = (
+        grouped_vol.ewm(span=5, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(2)
+    )
+    df["vol_sma_10"] = (
+        grouped_vol.rolling(10, min_periods=10)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(2)
+    )
+    df["vol_ema_21"] = (
+        grouped_vol.ewm(span=21, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(2)
+    )
+    df["vol_sma_60"] = (
+        grouped_vol.rolling(60, min_periods=60)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(2)
+    )
+    df["vol_5_21_dist_pct"] = (
+        (
+            (df["vol_ema_5"] - df["vol_ema_21"])
+            / df["vol_ema_21"].replace(0, float("nan"))
+        )
+        * 100
+    ).round(2)
 
     # --- 3. RSI Calculations ---
     delta = df["close"] - df["prev_close"]
@@ -90,8 +202,18 @@ def run_python_indicator_pipeline(engine, target_date=None):
     down = -1 * delta.clip(upper=0)
 
     def calculate_rsi(periods):
-        roll_up = up.groupby(df["ticker"]).ewm(alpha=1/periods, min_periods=periods, adjust=False).mean().reset_index(level=0, drop=True)
-        roll_down = down.groupby(df["ticker"]).ewm(alpha=1/periods, min_periods=periods, adjust=False).mean().reset_index(level=0, drop=True)
+        roll_up = (
+            up.groupby(df["ticker"])
+            .ewm(alpha=1 / periods, min_periods=periods, adjust=False)
+            .mean()
+            .reset_index(level=0, drop=True)
+        )
+        roll_down = (
+            down.groupby(df["ticker"])
+            .ewm(alpha=1 / periods, min_periods=periods, adjust=False)
+            .mean()
+            .reset_index(level=0, drop=True)
+        )
         rs = roll_up / roll_down
         rsi = 100.0 - (100.0 / (1.0 + rs))
         return rsi.mask(roll_down == 0, 100.0).round(2)
@@ -112,7 +234,9 @@ def run_python_indicator_pipeline(engine, target_date=None):
             WHERE market_date < CAST(:dt AS DATE)
             ORDER BY ticker, market_date DESC
         """)
-        anchor_obv_df = pd.read_sql(yesterday_obv_query, engine, params={"dt": target_date})
+        anchor_obv_df = pd.read_sql(
+            yesterday_obv_query, engine, params={"dt": target_date}
+        )
         df = df.merge(anchor_obv_df, on="ticker", how="left")
         df["naive_obv"] = df.groupby("ticker")["obv_change"].cumsum()
         is_anchor = df["market_date"].astype(str) == df["anchor_date"].astype(str)
@@ -133,36 +257,113 @@ def run_python_indicator_pipeline(engine, target_date=None):
     df["plus_dm"] = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
     df["minus_dm"] = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
 
-    smoothed_plus_dm = df.groupby("ticker")["plus_dm"].ewm(alpha=1/14, min_periods=14, adjust=False).mean().reset_index(level=0, drop=True)
-    smoothed_minus_dm = df.groupby("ticker")["minus_dm"].ewm(alpha=1/14, min_periods=14, adjust=False).mean().reset_index(level=0, drop=True)
+    smoothed_plus_dm = (
+        df.groupby("ticker")["plus_dm"]
+        .ewm(alpha=1 / 14, min_periods=14, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+    )
+    smoothed_minus_dm = (
+        df.groupby("ticker")["minus_dm"]
+        .ewm(alpha=1 / 14, min_periods=14, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+    )
 
     df["plus_di"] = (100 * smoothed_plus_dm / df["atr_14"].replace(0, np.nan)).round(2)
-    df["minus_di"] = (100 * smoothed_minus_dm / df["atr_14"].replace(0, np.nan)).round(2)
-    df["dx"] = 100 * (np.abs(df["plus_di"] - df["minus_di"]) / (df["plus_di"] + df["minus_di"]).replace(0, np.nan))
-    df["adx_14"] = df.groupby("ticker")["dx"].ewm(alpha=1/14, min_periods=14, adjust=False).mean().reset_index(level=0, drop=True).round(2)
+    df["minus_di"] = (100 * smoothed_minus_dm / df["atr_14"].replace(0, np.nan)).round(
+        2
+    )
+    df["dx"] = 100 * (
+        np.abs(df["plus_di"] - df["minus_di"])
+        / (df["plus_di"] + df["minus_di"]).replace(0, np.nan)
+    )
+    df["adx_14"] = (
+        df.groupby("ticker")["dx"]
+        .ewm(alpha=1 / 14, min_periods=14, adjust=False)
+        .mean()
+        .reset_index(level=0, drop=True)
+        .round(2)
+    )
 
     # --- 5. RVOL Calculations ---
-    df["rvol_ema_5"] = (df["volume"] / df["vol_ema_5"].replace(0, float("nan"))).round(2)
-    df["rvol_sma_10"] = (df["volume"] / df["vol_sma_10"].replace(0, float("nan"))).round(2)
-    df["rvol_ema_21"] = (df["volume"] / df["vol_ema_21"].replace(0, float("nan"))).round(2)
-    df["rvol_sma_60"] = (df["volume"] / df["vol_sma_60"].replace(0, float("nan"))).round(2)
+    df["rvol_ema_5"] = (df["volume"] / df["vol_ema_5"].replace(0, float("nan"))).round(
+        2
+    )
+    df["rvol_sma_10"] = (
+        df["volume"] / df["vol_sma_10"].replace(0, float("nan"))
+    ).round(2)
+    df["rvol_ema_21"] = (
+        df["volume"] / df["vol_ema_21"].replace(0, float("nan"))
+    ).round(2)
+    df["rvol_sma_60"] = (
+        df["volume"] / df["vol_sma_60"].replace(0, float("nan"))
+    ).round(2)
 
     # --- 6. DoD, WoW, and MoM Rate of Change ---
     grouped_ticker = df.groupby("ticker")
-    df["rvol_ema_5_dod_diff"] = (df["rvol_ema_5"] - grouped_ticker["rvol_ema_5"].shift(1)).round(2)
-    df["volume_dod_pct"] = (((df["volume"] - grouped_ticker["volume"].shift(1)) / grouped_ticker["volume"].shift(1).replace(0, float("nan"))) * 100).round(2)
+    df["rvol_ema_5_dod_diff"] = (
+        df["rvol_ema_5"] - grouped_ticker["rvol_ema_5"].shift(1)
+    ).round(2)
+    df["volume_dod_pct"] = (
+        (
+            (df["volume"] - grouped_ticker["volume"].shift(1))
+            / grouped_ticker["volume"].shift(1).replace(0, float("nan"))
+        )
+        * 100
+    ).round(2)
     df["rsi_14_dod_diff"] = (df["rsi_14"] - grouped_ticker["rsi_14"].shift(1)).round(2)
-    
-    grouped_ticker = df.groupby("ticker")
-    df["volume_dod_sma_3"] = grouped_ticker["volume_dod_pct"].transform(lambda x: x.rolling(3, min_periods=1).mean()).round(2)
-    df["rsi_velocity_3d"] = grouped_ticker["rsi_14_dod_diff"].transform(lambda x: x.rolling(3, min_periods=1).mean()).round(2)
 
-    df["macd_hist_dod_diff"] = (df["macd_hist"] - grouped_ticker["macd_hist"].shift(1)).round(4)
-    df["atr_14_dod_pct"] = (((df["atr_14"] - grouped_ticker["atr_14"].shift(1)) / grouped_ticker["atr_14"].shift(1).replace(0, float("nan"))) * 100).round(2)
-    df["price_change_wow_pct"] = (((df["close"] - grouped_ticker["close"].shift(5)) / grouped_ticker["close"].shift(5).replace(0, float("nan"))) * 100).round(4)
-    df["volume_wow_pct"] = (((df["volume"] - grouped_ticker["volume"].shift(5)) / grouped_ticker["volume"].shift(5).replace(0, float("nan"))) * 100).round(2)
-    df["price_change_mom_pct"] = (((df["close"] - grouped_ticker["close"].shift(21)) / grouped_ticker["close"].shift(21).replace(0, float("nan"))) * 100).round(4)
-    df["volume_mom_pct"] = (((df["volume"] - grouped_ticker["volume"].shift(21)) / grouped_ticker["volume"].shift(21).replace(0, float("nan"))) * 100).round(2)
+    grouped_ticker = df.groupby("ticker")
+    df["volume_dod_sma_3"] = (
+        grouped_ticker["volume_dod_pct"]
+        .transform(lambda x: x.rolling(3, min_periods=1).mean())
+        .round(2)
+    )
+    df["rsi_velocity_3d"] = (
+        grouped_ticker["rsi_14_dod_diff"]
+        .transform(lambda x: x.rolling(3, min_periods=1).mean())
+        .round(2)
+    )
+
+    df["macd_hist_dod_diff"] = (
+        df["macd_hist"] - grouped_ticker["macd_hist"].shift(1)
+    ).round(4)
+    df["atr_14_dod_pct"] = (
+        (
+            (df["atr_14"] - grouped_ticker["atr_14"].shift(1))
+            / grouped_ticker["atr_14"].shift(1).replace(0, float("nan"))
+        )
+        * 100
+    ).round(2)
+    df["price_change_wow_pct"] = (
+        (
+            (df["close"] - grouped_ticker["close"].shift(5))
+            / grouped_ticker["close"].shift(5).replace(0, float("nan"))
+        )
+        * 100
+    ).round(4)
+    df["volume_wow_pct"] = (
+        (
+            (df["volume"] - grouped_ticker["volume"].shift(5))
+            / grouped_ticker["volume"].shift(5).replace(0, float("nan"))
+        )
+        * 100
+    ).round(2)
+    df["price_change_mom_pct"] = (
+        (
+            (df["close"] - grouped_ticker["close"].shift(21))
+            / grouped_ticker["close"].shift(21).replace(0, float("nan"))
+        )
+        * 100
+    ).round(4)
+    df["volume_mom_pct"] = (
+        (
+            (df["volume"] - grouped_ticker["volume"].shift(21))
+            / grouped_ticker["volume"].shift(21).replace(0, float("nan"))
+        )
+        * 100
+    ).round(2)
 
     # --- 6.5 Trend Trajectory ---
     logger.info("Calculating Linear Regression Slopes and R-Squared...")
@@ -194,31 +395,98 @@ def run_python_indicator_pipeline(engine, target_date=None):
     df.drop(columns=["_idx"], inplace=True)
 
     cols_to_keep = [
-        "ticker", "market_date", "close", "prev_close", "gap_pct", "price_change_dod_pct", 
-        "price_change_wow_pct", "price_change_mom_pct", "open_to_close_pct", "atr_14", 
-        "atr_14_pct", "atr_5", "atr_21", "atr_5_21_dist_pct", "sma_21", "sma_21_dist_pct", 
-        "sma_50", "sma_50_dist_pct", "sma_200", "sma_200_dist_pct", "ema_9", "ema_21", 
-        "ema_9_21_dist_pct", "macd", "macd_signal", "macd_hist", "bb_mid", "bb_upper", 
-        "bb_lower", "kc_mid", "kc_upper", "kc_lower", "rsi_14", "rsi_5", "rsi_21", 
-        "rsi_5_21_diff", "adx_14", "plus_di", "minus_di", "obv", "vol_ema_5", "vol_sma_10", 
-        "vol_ema_21", "vol_sma_60", "vol_5_21_dist_pct", "rvol_ema_5", "rvol_sma_10", 
-        "rvol_ema_21", "rvol_sma_60", "rvol_ema_5_dod_diff", "volume_dod_pct", "volume_wow_pct", 
-        "volume_mom_pct", "rsi_14_dod_diff", "macd_hist_dod_diff", "atr_14_dod_pct", 
-        "volume_dod_sma_3", "rsi_velocity_3d", "close_slope_3d", "close_r2_3d", "close_slope_5d", 
-        "close_r2_5d", "close_slope_10d", "close_r2_10d", "close_slope_21d", "close_r2_21d", 
-        "sma_50_dist_pct_slope_3d", "sma_50_dist_pct_r2_3d", "sma_50_dist_pct_slope_5d", 
-        "sma_50_dist_pct_r2_5d", "sma_50_dist_pct_slope_10d", "sma_50_dist_pct_r2_10d", 
-        "sma_50_dist_pct_slope_21d", "sma_50_dist_pct_r2_21d", "rsi_14_slope_3d", 
-        "rsi_14_r2_3d", "rsi_14_slope_5d", "rsi_14_r2_5d", "rsi_14_slope_10d", "rsi_14_r2_10d", 
-        "rsi_14_slope_21d", "rsi_14_r2_21d"
+        "ticker",
+        "market_date",
+        "close",
+        "prev_close",
+        "gap_pct",
+        "price_change_dod_pct",
+        "price_change_wow_pct",
+        "price_change_mom_pct",
+        "open_to_close_pct",
+        "atr_14",
+        "atr_14_pct",
+        "atr_5",
+        "atr_21",
+        "atr_5_21_dist_pct",
+        "sma_21",
+        "sma_21_dist_pct",
+        "sma_50",
+        "sma_50_dist_pct",
+        "sma_200",
+        "sma_200_dist_pct",
+        "ema_9",
+        "ema_21",
+        "ema_9_21_dist_pct",
+        "macd",
+        "macd_signal",
+        "macd_hist",
+        "bb_mid",
+        "bb_upper",
+        "bb_lower",
+        "kc_mid",
+        "kc_upper",
+        "kc_lower",
+        "rsi_14",
+        "rsi_5",
+        "rsi_21",
+        "rsi_5_21_diff",
+        "adx_14",
+        "plus_di",
+        "minus_di",
+        "obv",
+        "vol_ema_5",
+        "vol_sma_10",
+        "vol_ema_21",
+        "vol_sma_60",
+        "vol_5_21_dist_pct",
+        "rvol_ema_5",
+        "rvol_sma_10",
+        "rvol_ema_21",
+        "rvol_sma_60",
+        "rvol_ema_5_dod_diff",
+        "volume_dod_pct",
+        "volume_wow_pct",
+        "volume_mom_pct",
+        "rsi_14_dod_diff",
+        "macd_hist_dod_diff",
+        "atr_14_dod_pct",
+        "volume_dod_sma_3",
+        "rsi_velocity_3d",
+        "close_slope_3d",
+        "close_r2_3d",
+        "close_slope_5d",
+        "close_r2_5d",
+        "close_slope_10d",
+        "close_r2_10d",
+        "close_slope_21d",
+        "close_r2_21d",
+        "sma_50_dist_pct_slope_3d",
+        "sma_50_dist_pct_r2_3d",
+        "sma_50_dist_pct_slope_5d",
+        "sma_50_dist_pct_r2_5d",
+        "sma_50_dist_pct_slope_10d",
+        "sma_50_dist_pct_r2_10d",
+        "sma_50_dist_pct_slope_21d",
+        "sma_50_dist_pct_r2_21d",
+        "rsi_14_slope_3d",
+        "rsi_14_r2_3d",
+        "rsi_14_slope_5d",
+        "rsi_14_r2_5d",
+        "rsi_14_slope_10d",
+        "rsi_14_r2_10d",
+        "rsi_14_slope_21d",
+        "rsi_14_r2_21d",
     ]
-    
+
     final_df = df[cols_to_keep].copy()
 
     if target_date:
         final_df = final_df[final_df["market_date"].astype(str) == target_date]
 
-    final_df = final_df.dropna(subset=["atr_14", "sma_50", "sma_200", "rvol_ema_5", "rsi_14"], how="all")
+    final_df = final_df.dropna(
+        subset=["atr_14", "sma_50", "sma_200", "rvol_ema_5", "rsi_14"], how="all"
+    )
 
     if final_df.empty:
         logger.warning("No new calculated indicators to upload.")

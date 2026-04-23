@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, text
 
 logger = logging.getLogger(__name__)
 
+
 def init_database(db_url):
     """Executes a SQL file to initialize the database schema."""
     sql_file_path = os.path.join(os.path.dirname(__file__), "sql", "init_schema.sql")

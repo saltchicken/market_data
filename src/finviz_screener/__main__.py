@@ -15,6 +15,7 @@ from core.log_config import setup_logging
 
 logger = logging.getLogger("finviz_screener")
 
+
 def fetch_group_tickers(filters_dict: dict) -> pd.DataFrame:
     """Pulls the screener data for the specified filters across all tabs."""
     tabs = [
@@ -66,10 +67,14 @@ def clean_columns_for_db(df: pd.DataFrame) -> pd.DataFrame:
                 try:
                     num = float(val[:-1])
                     mult = val[-1].upper()
-                    if mult == "T": return num * 1e12
-                    if mult == "B": return num * 1e9
-                    if mult == "M": return num * 1e6
-                    if mult == "K": return num * 1e3
+                    if mult == "T":
+                        return num * 1e12
+                    if mult == "B":
+                        return num * 1e9
+                    if mult == "M":
+                        return num * 1e6
+                    if mult == "K":
+                        return num * 1e3
                 except ValueError:
                     pass
         return val
@@ -85,20 +90,40 @@ def clean_columns_for_db(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     redundant_columns = [
-        "price", "change", "volume", "avg_volume", "rel_volume", "perf_week",
-        "perf_month", "perf_quart", "perf_half", "perf_ytd", "perf_year",
-        "perf_3y", "perf_5y", "perf_10y", "gap", "change_from_open", "sma20",
-        "sma50", "sma200", "rsi", "atr", "volatility_w", "volatility_m",
+        "price",
+        "change",
+        "volume",
+        "avg_volume",
+        "rel_volume",
+        "perf_week",
+        "perf_month",
+        "perf_quart",
+        "perf_half",
+        "perf_ytd",
+        "perf_year",
+        "perf_3y",
+        "perf_5y",
+        "perf_10y",
+        "gap",
+        "change_from_open",
+        "sma20",
+        "sma50",
+        "sma200",
+        "rsi",
+        "atr",
+        "volatility_w",
+        "volatility_m",
     ]
     df_db = df_db.drop(
         columns=[col for col in redundant_columns if col in df_db.columns]
     )
 
     for col in df_db.columns:
-        if df_db[col].dtype == "object": 
+        if df_db[col].dtype == "object":
             df_db[col] = df_db[col].replace("-", None)
             original_valid = df_db[col].notna().sum()
-            if original_valid == 0: continue
+            if original_valid == 0:
+                continue
 
             df_db[col] = df_db[col].apply(parse_suffix)
 
@@ -173,9 +198,18 @@ def main():
     parser.add_argument("--sector", type=str, help="Filter by Sector")
     parser.add_argument("--industry", type=str, help="Filter by Industry")
     parser.add_argument("--country", type=str, help="Filter by Country")
-    parser.add_argument("--all", action="store_true", default=True, help="Fetch ALL tickers")
-    parser.add_argument("--db-url", type=str, default=os.getenv("DB_URL"), help="PostgreSQL Connection URL")
-    parser.add_argument("--db-table", type=str, default="finviz_screener", help="Target Postgres Table")
+    parser.add_argument(
+        "--all", action="store_true", default=True, help="Fetch ALL tickers"
+    )
+    parser.add_argument(
+        "--db-url",
+        type=str,
+        default=os.getenv("DB_URL"),
+        help="PostgreSQL Connection URL",
+    )
+    parser.add_argument(
+        "--db-table", type=str, default="finviz_screener", help="Target Postgres Table"
+    )
     parser.add_argument("--out-csv", type=str, help="Output CSV Prefix")
 
     args = parser.parse_args()
@@ -185,9 +219,12 @@ def main():
         init_database(args.db_url)
 
     filters = {}
-    if args.sector: filters["Sector"] = args.sector
-    if args.industry: filters["Industry"] = args.industry
-    if args.country: filters["Country"] = args.country
+    if args.sector:
+        filters["Sector"] = args.sector
+    if args.industry:
+        filters["Industry"] = args.industry
+    if args.country:
+        filters["Country"] = args.country
 
     if not filters:
         logger.info("Fetching ALL data tabs for ALL tickers (no filters applied)...")
@@ -197,7 +234,9 @@ def main():
     df = fetch_group_tickers(filters)
 
     if df.empty:
-        logger.warning("No tickers found for the specified filters, or an error occurred.")
+        logger.warning(
+            "No tickers found for the specified filters, or an error occurred."
+        )
         sys.exit(0)
 
     current_date = datetime.today().strftime("%Y-%m-%d")
@@ -215,16 +254,22 @@ def main():
         logger.info(f"Exporting to PostgreSQL database table: '{args.db_table}'...")
         try:
             from sqlalchemy import create_engine
+
             engine = create_engine(args.db_url)
             df_db = clean_columns_for_db(df)
             upsert_finviz_data(df_db, args.db_table, engine)
-            logger.info(f"Successfully upserted data to PostgreSQL table: {args.db_table}")
+            logger.info(
+                f"Successfully upserted data to PostgreSQL table: {args.db_table}"
+            )
 
         except ImportError:
-            logger.error("Missing database dependencies. Please run: pip install sqlalchemy psycopg2-binary")
+            logger.error(
+                "Missing database dependencies. Please run: pip install sqlalchemy psycopg2-binary"
+            )
             sys.exit(1)
         except Exception as e:
             logger.error(f"Database export failed: {e}")
+
 
 if __name__ == "__main__":
     main()

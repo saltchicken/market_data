@@ -20,11 +20,17 @@ logger = logging.getLogger("market_data")
 
 def main():
     setup_logging("market_data")
-    
-    parser = argparse.ArgumentParser(description="Market Data Fetcher and Indicator Calculator")
+
+    parser = argparse.ArgumentParser(
+        description="Market Data Fetcher and Indicator Calculator"
+    )
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--reset", action="store_true", help="Wipe and rebuild 2 years of data")
-    group.add_argument("--recalc", action="store_true", help="Re-calculate all indicators")
+    group.add_argument(
+        "--reset", action="store_true", help="Wipe and rebuild 2 years of data"
+    )
+    group.add_argument(
+        "--recalc", action="store_true", help="Re-calculate all indicators"
+    )
     args = parser.parse_args()
 
     load_dotenv()
@@ -32,7 +38,9 @@ def main():
     DB_URL = os.getenv("DB_URL")
 
     if not API_KEY or not DB_URL:
-        logger.error("Missing env variables. Ensure POLYGON_API_KEY and DB_URL are set.")
+        logger.error(
+            "Missing env variables. Ensure POLYGON_API_KEY and DB_URL are set."
+        )
         sys.exit(1)
 
     engine = create_engine(DB_URL)
@@ -46,7 +54,9 @@ def main():
         start_date = end_date - timedelta(days=730)
         dates_to_fetch = pd.bdate_range(start=start_date, end=end_date)
 
-        logger.info(f"[PHASE 1] Fetching {len(dates_to_fetch)} days of raw market data...")
+        logger.info(
+            f"[PHASE 1] Fetching {len(dates_to_fetch)} days of raw market data..."
+        )
         for date_obj in dates_to_fetch:
             target_date = date_obj.strftime("%Y-%m-%d")
             logger.info(f"--- Processing Raw Data: {target_date} ---")

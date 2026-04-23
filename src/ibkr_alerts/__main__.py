@@ -23,12 +23,18 @@ def main():
     watch_targets = get_watchlist_targets_from_db(db_url)
 
     if not watch_targets:
-        logger.error("Watchlist is empty or could not be loaded from the database. Exiting.")
+        logger.error(
+            "Watchlist is empty or could not be loaded from the database. Exiting."
+        )
         sys.exit(1)
 
-    logger.info(f"Loaded {len(watch_targets)} active tickers from the database to monitor:")
+    logger.info(
+        f"Loaded {len(watch_targets)} active tickers from the database to monitor:"
+    )
     for ticker, data in watch_targets.items():
-        prev_close_str = f"${data['prev_close']:.2f}" if data.get("prev_close") else "N/A"
+        prev_close_str = (
+            f"${data['prev_close']:.2f}" if data.get("prev_close") else "N/A"
+        )
         logger.info(f"  -> {ticker}: Prev Close={prev_close_str}")
 
     ib = IB()
@@ -44,28 +50,34 @@ def main():
     # Start the monitoring service
     monitor = monitor_market_open(ib, watch_targets)
 
-    logger.info("Listening for Market Open (06:30 PST) and building candles (5m, 15m, 30m)...")
+    logger.info(
+        "Listening for Market Open (06:30 PST) and building candles (5m, 15m, 30m)..."
+    )
 
     try:
         while True:
             now = datetime.datetime.now()
             monitor.check_time_alerts(now.time())
-            
+
             if monitor.alerted_30m:
                 logger.info("⏰ All timeframes completed. Finalizing monitor.")
                 break
-            
+
             ib.sleep(5)
 
     except KeyboardInterrupt:
         logger.warning("🛑 Ctrl+C detected. Finalizing early...")
-        if not monitor.alerted_5m: monitor._alert_timeframe("5m")
-        elif not monitor.alerted_15m: monitor._alert_timeframe("15m")
-        elif not monitor.alerted_30m: monitor._alert_timeframe("30m")
+        if not monitor.alerted_5m:
+            monitor._alert_timeframe("5m")
+        elif not monitor.alerted_15m:
+            monitor._alert_timeframe("15m")
+        elif not monitor.alerted_30m:
+            monitor._alert_timeframe("30m")
     finally:
         if ib.isConnected():
             ib.disconnect()
             logger.info("🔌 Disconnected cleanly from IB Gateway. Goodbye!")
+
 
 if __name__ == "__main__":
     main()
